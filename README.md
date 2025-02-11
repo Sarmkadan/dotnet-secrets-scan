@@ -2,4 +2,7 @@
 
 Scans a .NET solution for leaked secrets in appsettings, code and connection strings.
 
-> v0.1 in progress.
+## SecretRule
+
+Represents a rule for detecting secrets in code. It defines a pattern to match against and a severity level for the finding.
+
