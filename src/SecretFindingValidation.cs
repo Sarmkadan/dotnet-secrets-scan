@@ -10,12 +10,10 @@ public static class SecretFindingValidation
     /// </summary>
     /// <param name="value">The secret finding to validate.</param>
     /// <returns>A list of validation problems; empty if valid.</returns>
-    public static IReadOnlyList<string> Validate(this SecretFinding value)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
+    public static IReadOnlyList<string> Validate(this SecretFinding? value)
     {
-        if (value is null)
-        {
-            return new[] { "SecretFinding is null" };
-        }
+        ArgumentNullException.ThrowIfNull(value);
 
         var problems = new List<string>();
 
@@ -57,17 +55,15 @@ public static class SecretFindingValidation
     /// </summary>
     /// <param name="value">The secret finding to check.</param>
     /// <returns>True if the finding is valid; otherwise, false.</returns>
-    public static bool IsValid(this SecretFinding value)
-    {
-        return value.Validate().Count == 0;
-    }
+    public static bool IsValid(this SecretFinding? value) => value?.Validate().Count == 0;
 
     /// <summary>
     /// Ensures that a secret finding is valid, throwing an exception if it is not.
     /// </summary>
     /// <param name="value">The secret finding to validate.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Thrown when the finding is invalid.</exception>
-    public static void EnsureValid(this SecretFinding value)
+    public static void EnsureValid(this SecretFinding? value)
     {
         var problems = value.Validate();
 
