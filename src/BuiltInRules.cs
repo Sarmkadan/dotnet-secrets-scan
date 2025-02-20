@@ -157,7 +157,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS009",
             name: "Generic API Key",
-            pattern: @"api[_-]?key[\s:=]{0,5}[""]?[a-zA-Z0-9]{{32,}}[""]?",
+            pattern: @"api[_-]?key[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
             description: "Generic API key pattern (32+ characters)",
             severity: SecretSeverity.Medium
         ),
@@ -166,7 +166,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS010",
             name: "Generic Secret",
-            pattern: @"secret[\s:=]{0,5}[""]?[a-zA-Z0-9]{{32,}}[""]?",
+            pattern: @"secret[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
             description: "Generic secret key pattern (32+ characters)",
             severity: SecretSeverity.Medium
         ),
@@ -175,7 +175,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS011",
             name: "Generic Private Key",
-            pattern: @"private[\s:=]{0,5}[""]?[a-zA-Z0-9]{{32,}}[""]?",
+            pattern: @"private[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
             description: "Generic private key pattern (32+ characters)",
             severity: SecretSeverity.High
         ),
@@ -184,7 +184,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS012",
             name: "Telegram Bot Token",
-            pattern: @"[0-9]{{9,10}}:[a-zA-Z0-9_-]{{35}}",
+            pattern: @"[0-9]{9,10}:[a-zA-Z0-9_-]{35}",
             description: "Telegram Bot Token (9-10 digit ID followed by colon and 35 character token)",
             severity: SecretSeverity.High
         ),
@@ -193,7 +193,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS013",
             name: "Stripe API Key",
-            pattern: @"sk_live_[0-9a-zA-Z]{{24}}",
+            pattern: @"sk_live_[0-9a-zA-Z]{24}",
             description: "Stripe live secret key (sk_live_ prefix followed by 24 characters)",
             severity: SecretSeverity.High
         ),
@@ -202,7 +202,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS014",
             name: "Stripe Publishable Key",
-            pattern: @"pk_live_[0-9a-zA-Z]{{24}}",
+            pattern: @"pk_live_[0-9a-zA-Z]{24}",
             description: "Stripe live publishable key (pk_live_ prefix followed by 24 characters)",
             severity: SecretSeverity.Medium
         ),
@@ -211,7 +211,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS015",
             name: "Google API Key",
-            pattern: @"AIza[0-9A-Za-z\-_]{{35}}",
+            pattern: @"AIza[0-9A-Za-z\-_]{35}",
             description: "Google API Key (AIza prefix followed by 35 characters)",
             severity: SecretSeverity.Medium
         ),
@@ -220,7 +220,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS016",
             name: "Basic Auth Credentials",
-            pattern: @"(?:Authorization|Proxy-Authorization): Basic [a-zA-Z0-9\+/=]{{10,}}",
+            pattern: @"(?:Authorization|Proxy-Authorization): Basic [a-zA-Z0-9\+/=]{10,}",
             description: "Base64 encoded Basic Authentication credentials",
             severity: SecretSeverity.High
         ),
@@ -229,7 +229,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS017",
             name: "NPM Token",
-            pattern: @"npm_[a-zA-Z0-9]{{36}}",
+            pattern: @"npm_[a-zA-Z0-9]{36}",
             description: "NPM authentication token (npm_ prefix followed by 36 characters)",
             severity: SecretSeverity.High
         ),
@@ -238,7 +238,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS018",
             name: "NuGet API Key",
-            pattern: @"oy2[a-zA-Z0-9]{{32}}",
+            pattern: @"oy2[a-zA-Z0-9]{32}",
             description: "NuGet API key (oy2 prefix followed by 32 characters)",
             severity: SecretSeverity.High
         )

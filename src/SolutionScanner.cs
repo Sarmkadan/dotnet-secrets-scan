@@ -76,7 +76,11 @@ public sealed class SolutionScanner
         foreach (var rule in _rules)
         {
             var matches = rule.Match(fileContent, lines);
-            findings.AddRange(matches);
+            foreach (var match in matches)
+            {
+                match.FilePath = filePath;
+                findings.Add(match);
+            }
         }
 
         var entropyFindings = EntropyDetector.Scan(filePath, lines);

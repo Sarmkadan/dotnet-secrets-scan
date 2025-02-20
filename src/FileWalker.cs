@@ -21,10 +21,10 @@ public sealed class FileWalker
     {
         _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "bin/",
-            "obj/",
-            "node_modules/",
-            ".git/"
+            "bin",
+            "obj",
+            "node_modules",
+            ".git"
         };
 
         if (excludeGlobs != null)
@@ -101,7 +101,7 @@ public sealed class FileWalker
             {
                 currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}/{segment}";
 
-                if (_excludePatterns.Contains(currentPath, StringComparer.OrdinalIgnoreCase))
+                if (_excludePatterns.Contains(segment) || _excludePatterns.Contains(currentPath))
                 {
                     isExcluded = true;
                     break;
