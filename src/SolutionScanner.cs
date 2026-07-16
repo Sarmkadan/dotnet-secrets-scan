@@ -30,6 +30,7 @@ public sealed class SolutionScanner
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var findings = new List<SecretFinding>();
         var filesScanned = 0;
+        long linesScanned = 0;
 
         try
         {
@@ -40,9 +41,10 @@ public sealed class SolutionScanner
             {
                 try
                 {
-                    var fileFindings = ProcessFile(filePath);
+                    var fileFindings = ProcessFile(filePath, out var fileLines);
                     findings.AddRange(fileFindings);
                     filesScanned++;
+                    linesScanned += fileLines;
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -60,18 +62,19 @@ public sealed class SolutionScanner
         {
             Findings = findings,
             TotalFilesScanned = filesScanned,
-            TotalLinesScanned = 0,
+            TotalLinesScanned = linesScanned,
             ScanTimestamp = DateTimeOffset.UtcNow
         };
 
         return scanResult;
     }
 
-    private List<SecretFinding> ProcessFile(string filePath)
+    private List<SecretFinding> ProcessFile(string filePath, out int lineCount)
     {
         var findings = new List<SecretFinding>();
         var fileContent = File.ReadAllText(filePath);
         var lines = File.ReadAllLines(filePath);
+        lineCount = lines.Length;
 
         foreach (var rule in _rules)
         {
@@ -86,7 +89,8 @@ public sealed class SolutionScanner
         var entropyFindings = EntropyDetector.Scan(filePath, lines);
         findings.AddRange(entropyFindings);
 
-        return findings;
+        // Honor "secrets-scan:ignore" comments (on the flagged line or the line above).
+        return IgnoreCommentParser.Filter(findings, _ => lines).ToList();
     }
 }
 
