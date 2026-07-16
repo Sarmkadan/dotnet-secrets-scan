@@ -66,23 +66,17 @@ public sealed class FileWalker
 
     private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo directory, SearchOption searchOption)
     {
-        IEnumerable<FileInfo> files;
-        try
+        // EnumerateFiles is lazy: exceptions surface during iteration, not at the call site,
+        // so a try/catch around the call alone would not protect the foreach below. Use
+        // EnumerationOptions to skip inaccessible entries instead of aborting the whole scan.
+        var options = new EnumerationOptions
         {
-            files = directory.EnumerateFiles("*", searchOption);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            yield break;
-        }
-        catch (PathTooLongException)
-        {
-            yield break;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            yield break;
-        }
+            IgnoreInaccessible = true,
+            RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+
+        IEnumerable<FileInfo> files = directory.EnumerateFiles("*", options);
 
         foreach (var file in files)
         {
