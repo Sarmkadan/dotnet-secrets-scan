@@ -89,3 +89,44 @@ bool matchesAzureRule = findings[0].MatchesRule("AzureStorageAccountKey"); // tr
 ## SecretFindingValidationJsonExtensions
 
 The `SecretFindingValidationJsonExtensions` class provides JSON serialization and deserialization extensions for secret finding validation results. It allows you to convert validation problems to and from JSON strings, and also supports serialization and deserialization of boolean validation results. Here's an example of how to use it:
+
+## ScanResult
+
+`ScanResult` aggregates the outcome of a secret scan. It contains the list of `SecretFinding` objects, counts of scanned files and lines, and the timestamp of the scan. The type is intended to be passed to the `ReportWriter` helpers to produce console, JSON, or SARIF output.
+
+```csharp
+using DotnetSecretsScan;
+using System;
+using System.Collections.Generic;
+
+// Assume we have performed a scan and collected findings
+var findings = new List<SecretFinding>
+{
+    new SecretFinding
+    {
+        FilePath = "appsettings.json",
+        LineNumber = 10,
+        Rule = "AzureStorageAccountKey",
+        Secret = "AccountKey=abc123...",
+        Severity = "High"
+    }
+};
+
+var result = new ScanResult
+{
+    Findings = findings,
+    TotalFilesScanned = 42,
+    TotalLinesScanned = 1234,
+    ScanTimestamp = DateTimeOffset.UtcNow
+};
+
+// Write a colour‑coded console report
+ReportWriter.WriteConsole(result, verbose: true);
+
+// Serialize to JSON
+string json = ReportWriter.ToJson(result);
+
+// Convert to SARIF for CI integration
+string sarif = ReportWriter.ToSarif(result);
+```
+
