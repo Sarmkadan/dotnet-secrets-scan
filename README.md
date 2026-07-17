@@ -20,3 +20,6 @@ Provides extension methods for `SecretRule` to enable common operations and enha
 
 Example usage:
 
+## SecretFindingValidationJsonExtensions
+
+The `SecretFindingValidationJsonExtensions` class provides JSON serialization and deserialization extensions for secret finding validation results. It allows you to convert validation problems to and from JSON strings, and also supports serialization and deserialization of boolean validation results. Here's an example of how to use it:
