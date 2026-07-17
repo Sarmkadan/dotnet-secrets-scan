@@ -24,11 +24,15 @@ namespace DotnetSecretsScan
 
             // Id must be non‑null, non‑empty, non‑whitespace.
             if (string.IsNullOrWhiteSpace(value.Id))
+            {
                 problems.Add("Id must be a non‑empty string.");
+            }
 
             // Name must be non‑null, non‑empty, non‑whitespace.
             if (string.IsNullOrWhiteSpace(value.Name))
+            {
                 problems.Add("Name must be a non‑empty string.");
+            }
 
             // Pattern must be a valid regular expression.
             if (string.IsNullOrWhiteSpace(value.Pattern))
@@ -50,11 +54,15 @@ namespace DotnetSecretsScan
 
             // Description is optional but must not be null.
             if (value.Description is null)
+            {
                 problems.Add("Description must not be null (empty string is allowed).");
+            }
 
             // Severity must be a defined enum value.
             if (!Enum.IsDefined(typeof(SecretSeverity), value.Severity))
+            {
                 problems.Add($"Severity '{value.Severity}' is not a defined {nameof(SecretSeverity)} value.");
+            }
 
             return problems.AsReadOnly();
         }
@@ -65,8 +73,11 @@ namespace DotnetSecretsScan
         /// <param name="value">The rule to test.</param>
         /// <returns><c>true</c> if the rule has no validation problems; otherwise, <c>false</c>.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is <c>null</c>.</exception>
-        public static bool IsValid(this SecretRule value) =>
-            value.Validate().Count == 0;
+        public static bool IsValid(this SecretRule value)
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            return value.Validate().Count == 0;
+        }
 
         /// <summary>
         /// Ensures that the supplied <see cref="SecretRule"/> is valid.
@@ -80,7 +91,9 @@ namespace DotnetSecretsScan
 
             var problems = value.Validate();
             if (problems.Count > 0)
+            {
                 throw new ArgumentException(string.Join("; ", problems), nameof(value));
+            }
         }
     }
 }
