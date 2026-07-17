@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace DotnetSecretsScan
@@ -16,12 +14,11 @@ namespace DotnetSecretsScan
         /// Determines whether the secret rule represents a high severity issue.
         /// </summary>
         /// <param name="rule">The secret rule to check.</param>
-        /// <returns><see langword="true"/> if the severity is "High"; otherwise, <see langword="false"/>.</returns>
+        /// <returns><see langword="true"/> if the severity is <see cref="SecretSeverity.High"/>; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rule"/> is <see langword="null"/>.</exception>
         public static bool IsHighSeverity(this SecretRule rule)
         {
             ArgumentNullException.ThrowIfNull(rule);
-
             return rule.Severity == SecretSeverity.High;
         }
 
@@ -29,12 +26,11 @@ namespace DotnetSecretsScan
         /// Determines whether the secret rule represents a medium severity issue.
         /// </summary>
         /// <param name="rule">The secret rule to check.</param>
-        /// <returns><see langword="true"/> if the severity is "Medium"; otherwise, <see langword="false"/>.</returns>
+        /// <returns><see langword="true"/> if the severity is <see cref="SecretSeverity.Medium"/>; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rule"/> is <see langword="null"/>.</exception>
         public static bool IsMediumSeverity(this SecretRule rule)
         {
             ArgumentNullException.ThrowIfNull(rule);
-
             return rule.Severity == SecretSeverity.Medium;
         }
 
@@ -42,12 +38,11 @@ namespace DotnetSecretsScan
         /// Determines whether the secret rule represents a low severity issue.
         /// </summary>
         /// <param name="rule">The secret rule to check.</param>
-        /// <returns><see langword="true"/> if the severity is "Low"; otherwise, <see langword="false"/>.</returns>
+        /// <returns><see langword="true"/> if the severity is <see cref="SecretSeverity.Low"/>; otherwise, <see langword="false"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rule"/> is <see langword="null"/>.</exception>
         public static bool IsLowSeverity(this SecretRule rule)
         {
             ArgumentNullException.ThrowIfNull(rule);
-
             return rule.Severity == SecretSeverity.Low;
         }
 
@@ -63,6 +58,7 @@ namespace DotnetSecretsScan
         public static SecretRule WithSeverity(this SecretRule rule, SecretSeverity newSeverity)
         {
             ArgumentNullException.ThrowIfNull(rule);
+            ArgumentNullException.ThrowIfNull(newSeverity);
 
             return new SecretRule(
                 id: rule.Id,
