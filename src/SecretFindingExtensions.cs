@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 
 namespace DotnetSecretsScan
@@ -52,6 +51,7 @@ namespace DotnetSecretsScan
             ArgumentNullException.ThrowIfNull(findings);
 
             return findings
+                .Where(f => f is not null)
                 .GroupBy(f => f.ComputeFingerprint())
                 .ToDictionary(
                     g => g.Key,
@@ -76,12 +76,11 @@ namespace DotnetSecretsScan
             ArgumentNullException.ThrowIfNull(findings);
             ArgumentNullException.ThrowIfNull(baseline);
 
-            var baselineFindings = baseline.Findings;
             var result = new List<SecretFinding>();
 
             foreach (var finding in findings)
             {
-                if (!baselineFindings.Contains(finding))
+                if (finding is not null && !baseline.Contains(finding))
                 {
                     result.Add(finding);
                 }
@@ -132,10 +131,10 @@ namespace DotnetSecretsScan
             var fileName = System.IO.Path.GetFileName(finding.FilePath);
             return fileName.StartsWith("test", StringComparison.OrdinalIgnoreCase) ||
                    fileName.StartsWith("tests", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.EndsWith(".Tests.cs", StringComparison.OrdinalIgnoreCase) ||
-                   fileName.EndsWith("Test.cs", StringComparison.OrdinalIgnoreCase) ||
-                   finding.FilePath.Contains("/test/", StringComparison.OrdinalIgnoreCase) ||
-                   finding.FilePath.Contains("\\test\\", StringComparison.OrdinalIgnoreCase);
+                   fileName.EndsWith(".Tests.cs", StringComparison.Ordinal) ||
+                   fileName.EndsWith("Test.cs", StringComparison.Ordinal) ||
+                   finding.FilePath.Contains("/test/", StringComparison.Ordinal) ||
+                   finding.FilePath.Contains("\\test\\", StringComparison.Ordinal);
         }
 
         /// <summary>
