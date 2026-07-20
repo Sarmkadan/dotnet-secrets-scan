@@ -213,6 +213,21 @@ public static class ReportWriter
         return JsonSerializer.Serialize(sarif, JsonOptions);
     }
 
+    /// <summary>
+    /// Converts a scan result to CSV format.
+    /// </summary>
+    /// <param name="result">The scan result to convert.</param>
+    /// <returns>CSV representation of the findings.</returns>
+    public static string ToCsv(ScanResult result)
+    {
+        if (result is null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        return CsvReportWriter.ToCsv(result.Findings);
+    }
+
     private static ConsoleColor GetSeverityColor(string severity)
     {
         return severity?.Trim().ToLowerInvariant() switch
