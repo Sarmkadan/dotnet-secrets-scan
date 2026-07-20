@@ -85,17 +85,33 @@ public static class EntropyDetector
                     continue;
                 }
 
-                // Calculate entropy
-                double entropy = ShannonEntropy(literal);
-
-                // Skip base64-like patterns (GUIDs, paths, etc.)
-                if (IsBase64Like(literal))
+                // Skip pure hex strings (often GUIDs or hashes)
+                if (IsHexOnly(literal))
                 {
                     continue;
                 }
 
+                // Determine if the literal is a valid Base64 string
+                bool isValidBase64 = IsValidBase64(literal);
+
+                // Adjust threshold for strong Base64 candidates
+                double effectiveThreshold = threshold;
+                if (isValidBase64 && literal.Length >= 32)
+                {
+                    // Lower the threshold because long Base64 strings are more likely to be secrets
+                    effectiveThreshold = Math.Max(0, threshold - 1.0);
+                }
+                else if (IsBase64Like(literal))
+                {
+                    // Skip other Base64‑like patterns that are unlikely to be secrets
+                    continue;
+                }
+
+                // Calculate entropy
+                double entropy = ShannonEntropy(literal);
+
                 // Check threshold
-                if (entropy >= threshold)
+                if (entropy >= effectiveThreshold)
                 {
                     yield return new SecretFinding
                     {
@@ -231,5 +247,44 @@ public static class EntropyDetector
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Determines whether the string consists solely of hexadecimal characters.
+    /// </summary>
+    private static bool IsHexOnly(string s)
+    {
+        return s.All(c =>
+            (c >= '0' && c <= '9') ||
+            (c >= 'a' && c <= 'f') ||
+            (c >= 'A' && c <= 'F'));
+    }
+
+    /// <summary>
+    /// Determines whether the string is a valid Base64 encoded value.
+    /// </summary>
+    private static bool IsValidBase64(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return false;
+        }
+
+        // Base64 strings should have a length that is a multiple of 4
+        if (s.Length % 4 != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            // Attempt to decode; if it succeeds, it's valid Base64
+            Convert.FromBase64String(s);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
