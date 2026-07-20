@@ -228,6 +228,21 @@ public static class ReportWriter
         return CsvReportWriter.ToCsv(result.Findings);
     }
 
+    /// <summary>
+    /// Converts a scan result to JUnit XML format for CI integration.
+    /// </summary>
+    /// <param name="result">The scan result to convert.</param>
+    /// <returns>JUnit XML representation.</returns>
+    public static string ToJUnit(ScanResult result)
+    {
+        if (result is null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        return JUnitReportWriter.ToJUnit(result);
+    }
+
     private static ConsoleColor GetSeverityColor(string severity)
     {
         return severity?.Trim().ToLowerInvariant() switch
