@@ -126,6 +126,15 @@ public static class BuiltInRules
             severity: SecretSeverity.High
         ),
 
+        // JWT
+        new SecretRule(
+            id: "JWT001",
+            name: "JSON Web Token",
+            pattern: @"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
+            description: "JSON Web Token (JWT) (starts with eyJ followed by three base64url segments separated by dots)",
+            severity: SecretSeverity.High
+        ),
+
         // GitHub Personal Access Token
         new SecretRule(
             id: "SS006",
