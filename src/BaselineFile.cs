@@ -31,6 +31,12 @@ public sealed class SecretFinding : IEquatable<SecretFinding>
     public required string Severity { get; set; }
 
     /// <summary>
+    /// Optional expiry date (ISO‑8601) for baseline entries.
+    /// When set to a past date, the entry is ignored on load so the finding re‑appears.
+    /// </summary>
+    public DateTime? Expires { get; set; }
+
+    /// <summary>
     /// Computes a fingerprint for the finding based on its identifying properties.
     /// </summary>
     /// <returns>A SHA256 hash string representing the finding.</returns>
@@ -148,6 +154,12 @@ public sealed class BaselineFile
         {
             foreach (var finding in findings)
             {
+                // Skip entries that have an expiry date in the past.
+                if (finding.Expires.HasValue && finding.Expires.Value <= DateTime.UtcNow)
+                {
+                    continue;
+                }
+
                 baseline.Add(finding);
             }
         }
