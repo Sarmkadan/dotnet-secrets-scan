@@ -1,3 +1,2 @@
 git rm "Console.WriteLine(deserializedIsValid);"
 git rm "var displayString = rule.ToDisplayString();"
-git commit -m "chore: remove stray junk files from repo root"
