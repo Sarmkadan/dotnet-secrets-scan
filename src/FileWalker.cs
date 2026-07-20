@@ -11,13 +11,22 @@ namespace DotnetSecretsScan;
 public sealed class FileWalker
 {
     private readonly HashSet<string> _excludePatterns;
-
+    private readonly long _maxFileSizeBytes;
 
     /// <summary>
-    /// Initializes a new instance of the FileWalker class.
+    /// Gets the number of files that were skipped because they exceeded <see cref="MaxFileSizeBytes"/>.
+    /// </summary>
+    public int SkippedFileCount { get; private set; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileWalker"/> class.
     /// </summary>
     /// <param name="excludeGlobs">Optional additional glob patterns to exclude from enumeration.</param>
-    public FileWalker(IEnumerable<string>? excludeGlobs = null)
+    /// <param name="maxFileSizeBytes">
+    /// Optional maximum file size (in bytes) to process. Files larger than this value will be skipped.
+    /// Defaults to <c>long.MaxValue</c> (no size limit).
+    /// </param>
+    public FileWalker(IEnumerable<string>? excludeGlobs = null, long maxFileSizeBytes = long.MaxValue)
     {
         _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -37,6 +46,8 @@ public sealed class FileWalker
                 }
             }
         }
+
+        _maxFileSizeBytes = maxFileSizeBytes;
     }
 
     /// <summary>
@@ -57,6 +68,9 @@ public sealed class FileWalker
         {
             throw new DirectoryNotFoundException($"Directory not found: {rootPath}");
         }
+
+        // Reset the skipped file counter for each new enumeration run.
+        SkippedFileCount = 0;
 
         var searchOption = SearchOption.AllDirectories;
         var dirInfo = new DirectoryInfo(rootPath);
@@ -80,6 +94,13 @@ public sealed class FileWalker
 
         foreach (var file in files)
         {
+            // Skip files that exceed the configured maximum size.
+            if (file.Length > _maxFileSizeBytes)
+            {
+                SkippedFileCount++;
+                continue;
+            }
+
             var relativePath = file.FullName.Substring(directory.FullName.Length).TrimStart('/', '\\');
             var pathSegments = relativePath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
 
