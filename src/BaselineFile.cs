@@ -263,4 +263,41 @@ public sealed class BaselineFile
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
         });
     }
+
+    /// <summary>
+    /// Prunes the baseline by removing entries whose file no longer exists or no longer matches.
+    /// </summary>
+    /// <returns>The number of entries pruned.</returns>
+    public int Prune()
+    {
+        if (_findings is null)
+        {
+            throw new InvalidOperationException("Baseline is empty");
+        }
+
+        var prunedCount = 0;
+        var newFindings = new List<SecretFinding>();
+
+        foreach (var finding in _findings)
+        {
+            if (System.IO.File.Exists(finding.FilePath))
+            {
+                newFindings.Add(finding);
+            }
+            else
+            {
+                prunedCount++;
+            }
+        }
+
+        _findings.Clear();
+        _fingerprints.Clear();
+
+        foreach (var finding in newFindings)
+        {
+            Add(finding);
+        }
+
+        return prunedCount;
+    }
 }
