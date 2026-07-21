@@ -19,9 +19,24 @@ public static class EntropyDetector
             return 0.0;
         }
 
+        return ShannonEntropy(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Calculates the Shannon entropy of a character span.
+    /// </summary>
+    /// <param name="span">The input character span.</param>
+    /// <returns>The entropy value in bits.</returns>
+    public static double ShannonEntropy(ReadOnlySpan<char> span)
+    {
+        if (span.IsEmpty)
+        {
+            return 0.0;
+        }
+
         // Count frequency of each character
         var frequency = new Dictionary<char, int>();
-        foreach (char c in s)
+        foreach (char c in span)
         {
             if (frequency.TryGetValue(c, out int count))
             {
@@ -34,7 +49,7 @@ public static class EntropyDetector
         }
 
         double entropy = 0.0;
-        int length = s.Length;
+        int length = span.Length;
 
         foreach (var pair in frequency)
         {
@@ -107,8 +122,8 @@ public static class EntropyDetector
                     continue;
                 }
 
-                // Calculate entropy
-                double entropy = ShannonEntropy(literal);
+                // Calculate entropy using ReadOnlySpan for better performance
+                double entropy = ShannonEntropy(literal.AsSpan());
 
                 // Check threshold
                 if (entropy >= effectiveThreshold)
@@ -224,21 +239,68 @@ public static class EntropyDetector
             return true;
         }
 
+        return IsBase64Like(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Checks if a character span looks like base64 or contains common non-secret patterns.
+    /// </summary>
+    private static bool IsBase64Like(ReadOnlySpan<char> span)
+    {
+        if (span.IsEmpty)
+        {
+            return true;
+        }
+
         // Check for GUID pattern
-        if (s.Length == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-')
+        if (span.Length == 36 && span[8] == '-' && span[13] == '-' && span[18] == '-' && span[23] == '-')
         {
             return true;
         }
 
         // Check for common path patterns
-        if (s.Contains('/') || s.Contains('\\') || s.Contains(".com") || s.Contains(".net") || s.Contains(".org"))
+        bool hasSlash = false;
+        bool hasDotCom = false;
+        bool hasDotNet = false;
+        bool hasDotOrg = false;
+
+        for (int i = 0; i < span.Length; i++)
+        {
+            char c = span[i];
+            if (c == '/' || c == '\\')
+            {
+                hasSlash = true;
+            }
+            else if (i <= span.Length - 4 && span.Slice(i, 4).SequenceEqual(".com"))
+            {
+                hasDotCom = true;
+            }
+            else if (i <= span.Length - 4 && span.Slice(i, 4).SequenceEqual(".net"))
+            {
+                hasDotNet = true;
+            }
+            else if (i <= span.Length - 4 && span.Slice(i, 4).SequenceEqual(".org"))
+            {
+                hasDotOrg = true;
+            }
+        }
+
+        if (hasSlash || hasDotCom || hasDotNet || hasDotOrg)
         {
             return true;
         }
 
         // Check for base64-like patterns (alphanumeric + some special chars)
-        int alphanumericCount = s.Count(c => char.IsLetterOrDigit(c) || c == '+' || c == '/' || c == '=');
-        double ratio = (double)alphanumericCount / s.Length;
+        int alphanumericCount = 0;
+        foreach (char c in span)
+        {
+            if (char.IsLetterOrDigit(c) || c == '+' || c == '/' || c == '=')
+            {
+                alphanumericCount++;
+            }
+        }
+
+        double ratio = (double)alphanumericCount / span.Length;
 
         // If most characters are alphanumeric/base64 chars, it's likely not a secret
         if (ratio > 0.85)
@@ -254,10 +316,30 @@ public static class EntropyDetector
     /// </summary>
     private static bool IsHexOnly(string s)
     {
-        return s.All(c =>
-            (c >= '0' && c <= '9') ||
-            (c >= 'a' && c <= 'f') ||
-            (c >= 'A' && c <= 'F'));
+        if (string.IsNullOrEmpty(s))
+        {
+            return false;
+        }
+
+        return IsHexOnly(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Determines whether the character span consists solely of hexadecimal characters.
+    /// </summary>
+    private static bool IsHexOnly(ReadOnlySpan<char> span)
+    {
+        foreach (char c in span)
+        {
+            if (!((c >= '0' && c <= '9') ||
+                  (c >= 'a' && c <= 'f') ||
+                  (c >= 'A' && c <= 'F')))
+            {
+                return false;
+            }
+        }
+
+        return !span.IsEmpty;
     }
 
     /// <summary>
@@ -270,8 +352,21 @@ public static class EntropyDetector
             return false;
         }
 
+        return IsValidBase64(s.AsSpan());
+    }
+
+    /// <summary>
+    /// Determines whether the character span is a valid Base64 encoded value.
+    /// </summary>
+    private static bool IsValidBase64(ReadOnlySpan<char> span)
+    {
+        if (span.IsWhiteSpace())
+        {
+            return false;
+        }
+
         // Base64 strings should have a length that is a multiple of 4
-        if (s.Length % 4 != 0)
+        if (span.Length % 4 != 0)
         {
             return false;
         }
@@ -279,7 +374,9 @@ public static class EntropyDetector
         try
         {
             // Attempt to decode; if it succeeds, it's valid Base64
-            Convert.FromBase64String(s);
+            // Convert.FromBase64String requires string, so we need to convert to string
+            // This is the only method that still needs a string conversion due to API limitations
+            Convert.FromBase64String(span.ToString());
             return true;
         }
         catch
