@@ -29,7 +29,7 @@ public sealed class SolutionScanner
 	/// <summary>
 	/// Scans the specified directory for secrets and sensitive information.
 	/// </summary>
-	/// <param name="rootPath">The root directory path to scan.</param>
+	/// <param name="rootPath">The root directory path to scan, or "-" to scan stdin.</param>
 	/// <returns>A <see cref="ScanResult"/> containing all findings and statistics.</returns>
 	/// <exception cref="ArgumentException">Thrown when <paramref name="rootPath"/> is null or whitespace.</exception>
 	/// <exception cref="DirectoryNotFoundException">Thrown when the specified directory does not exist.</exception>
@@ -40,13 +40,29 @@ public sealed class SolutionScanner
 			throw new ArgumentException("Root path cannot be null or whitespace.", nameof(rootPath));
 		}
 
+		if (rootPath == "-")
+		{
+			var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+			var content = Console.In.ReadToEnd();
+			var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+			var findings = ProcessContent(content, lines, "<stdin>");
+			stopwatch.Stop();
+			return new ScanResult
+			{
+				Findings = findings,
+				TotalFilesScanned = 1,
+				TotalLinesScanned = lines.Length,
+				ScanTimestamp = DateTimeOffset.UtcNow
+			};
+		}
+
 		if (!Directory.Exists(rootPath))
 		{
 			throw new DirectoryNotFoundException($"Directory not found: {rootPath}");
 		}
 
-		var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-		var findings = new List<SecretFinding>();
+		var stopwatch_ = System.Diagnostics.Stopwatch.StartNew();
+		var findings_ = new List<SecretFinding>();
 		var filesScanned = 0;
 		long linesScanned = 0;
 
@@ -60,7 +76,7 @@ public sealed class SolutionScanner
 				try
 				{
 					var fileFindings = ProcessFile(filePath, out var fileLines);
-					findings.AddRange(fileFindings);
+					findings_.AddRange(fileFindings);
 					filesScanned++;
 					linesScanned += fileLines;
 				}
@@ -69,16 +85,16 @@ public sealed class SolutionScanner
 					// Skip files we can't read
 					continue;
 				}
+			}
 		}
-	}
-	finally
-	{
-		stopwatch.Stop();
-	}
+		finally
+		{
+			stopwatch_.Stop();
+		}
 
 		var scanResult = new ScanResult
 		{
-			Findings = findings,
+			Findings = findings_,
 			TotalFilesScanned = filesScanned,
 			TotalLinesScanned = linesScanned,
 			ScanTimestamp = DateTimeOffset.UtcNow
@@ -95,10 +111,22 @@ public sealed class SolutionScanner
 	/// <returns>A list of <see cref="SecretFinding"/> objects representing detected secrets.</returns>
 	private List<SecretFinding> ProcessFile(string filePath, out int lineCount)
 	{
-		var findings = new List<SecretFinding>();
 		var fileContent = File.ReadAllText(filePath);
 		var lines = File.ReadAllLines(filePath);
 		lineCount = lines.Length;
+		return ProcessContent(fileContent, lines, filePath);
+	}
+
+	/// <summary>
+	/// Processes content to detect secrets using the configured rules and entropy analysis.
+	/// </summary>
+	/// <param name="fileContent">The content to scan.</param>
+	/// <param name="lines">The lines of the content.</param>
+	/// <param name="filePath">The path to associate with the findings.</param>
+	/// <returns>A list of <see cref="SecretFinding"/> objects representing detected secrets.</returns>
+	private List<SecretFinding> ProcessContent(string fileContent, string[] lines, string filePath)
+	{
+		var findings = new List<SecretFinding>();
 
 		foreach (var rule in _rules)
 		{
