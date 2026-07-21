@@ -166,7 +166,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS009",
             name: "Generic API Key",
-            pattern: @"api[_-]?key[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
+            pattern: @"api[_-]?key[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
             description: "Generic API key pattern (32+ characters)",
             severity: SecretSeverity.Medium
         ),
@@ -175,7 +175,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS010",
             name: "Generic Secret",
-            pattern: @"secret[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
+            pattern: @"secret[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
             description: "Generic secret key pattern (32+ characters)",
             severity: SecretSeverity.Medium
         ),
@@ -184,7 +184,7 @@ public static class BuiltInRules
         new SecretRule(
             id: "SS011",
             name: "Generic Private Key",
-            pattern: @"private[\s:=]{0,5}[""]?[a-zA-Z0-9]{32,}[""]?",
+            pattern: @"private[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
             description: "Generic private key pattern (32+ characters)",
             severity: SecretSeverity.High
         ),
@@ -249,6 +249,15 @@ public static class BuiltInRules
             name: "NuGet API Key",
             pattern: @"oy2[a-zA-Z0-9]{32}",
             description: "NuGet API key (oy2 prefix followed by 32 characters)",
+            severity: SecretSeverity.High
+        ),
+
+        // GitHub Fine-Grained Personal Access Token
+        new SecretRule(
+            id: "SS019",
+            name: "GitHub Fine-Grained PAT",
+            pattern: @"github_pat_[A-Za-z0-9_]{40}",
+            description: "GitHub fine-grained personal access token (github_pat_ prefix followed by 40 characters)",
             severity: SecretSeverity.High
         )
     };
