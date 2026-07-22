@@ -188,9 +188,23 @@ file static class SecretRuleExtensions
             yield break;
         }
 
-        var regex = new Regex(rule.Pattern, RegexOptions.Compiled);
-        var matches = regex.Matches(fileContent);
+        Regex regex;
+        try
+        {
+            regex = new Regex(rule.Pattern, RegexOptions.Compiled, TimeSpan.FromSeconds(2));
+        }
+        catch (ArgumentException)
+        {
+            // Skip this rule if the pattern is invalid
+            yield break;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Skip this file if regex compilation times out
+            yield break;
+        }
 
+        var matches = regex.Matches(fileContent);
         foreach (Match match in matches)
         {
             if (match.Success && match.Index >= 0)

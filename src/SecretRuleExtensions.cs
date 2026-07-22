@@ -83,7 +83,15 @@ namespace DotnetSecretsScan
             ArgumentNullException.ThrowIfNull(rule);
             ArgumentException.ThrowIfNullOrWhiteSpace(secret);
 
-            return Regex.IsMatch(secret, rule.Pattern, RegexOptions.CultureInvariant);
+            try
+        {
+            return Regex.IsMatch(secret, rule.Pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(2));
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Return false for timeout - treat as no match
+            return false;
+        }
         }
 
         /// <summary>
