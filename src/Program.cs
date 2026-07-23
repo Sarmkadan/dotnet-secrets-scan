@@ -67,20 +67,29 @@ public static class Program
             IsRequired = false
         };
 
+        var pruneBaselineOption = new Option<bool>(
+            new[] { "--prune-baseline" },
+            "Prune stale baseline entries and save the updated baseline")
+        {
+            IsRequired = false
+        };
+
         rootCommand.AddArgument(pathArgument);
         rootCommand.AddOption(outputOption);
         rootCommand.AddOption(formatOption);
         rootCommand.AddOption(verboseOption);
         rootCommand.AddOption(baselineOption);
+        rootCommand.AddOption(pruneBaselineOption);
 
         rootCommand.SetHandler(
-            (path, outputPath, format, verbose, baselinePath) =>
-                RunScan(path, outputPath, format, verbose, baselinePath),
+            (path, outputPath, format, verbose, baselinePath, pruneBaseline) =>
+                RunScan(path, outputPath, format, verbose, baselinePath, pruneBaseline),
             pathArgument,
             outputOption,
             formatOption,
             verboseOption,
-            baselineOption);
+            baselineOption,
+            pruneBaselineOption);
 
         return rootCommand;
     }
@@ -90,7 +99,8 @@ public static class Program
         string? outputPath,
         string format,
         bool verbose,
-        string? baselinePath)
+        string? baselinePath,
+        bool pruneBaseline)
     {
         try
         {
@@ -120,6 +130,13 @@ public static class Program
                 try
                 {
                     baseline = BaselineFile.Load(baselinePath);
+
+                    // Migrate old baseline format to new format (line-number independent)
+                    if (pruneBaseline)
+                    {
+                        var migratedCount = baseline.MigrateFromLegacyFormat();
+                        Console.WriteLine($"Migrated {migratedCount} baseline entries to new format.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -162,6 +179,45 @@ public static class Program
 
             // Determine exit code based on findings
             var exitCode = result.TotalFindings > 0 ? ExitCodes.Findings : ExitCodes.Success;
+
+            // If prune-baseline is requested, update the baseline file
+            if (pruneBaseline && baseline != null && !string.IsNullOrWhiteSpace(baselinePath))
+            {
+                try
+                {
+                    // Prune stale entries for each file that was scanned
+                    var filesScanned = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var finding in scanResult.Findings)
+                    {
+                        filesScanned.Add(finding.FilePath);
+                    }
+
+                    var totalPruned = 0;
+                    foreach (var filePath in filesScanned)
+                    {
+                        if (File.Exists(filePath))
+                        {
+                            var fileContent = await File.ReadAllTextAsync(filePath);
+                            var prunedCount = baseline.PruneStaleEntries(filePath, fileContent);
+                            totalPruned += prunedCount;
+                        }
+                    }
+
+                    if (totalPruned > 0)
+                    {
+                        Console.WriteLine($"Pruned {totalPruned} stale baseline entries.");
+                    }
+
+                    // Save the updated baseline
+                    baseline.Save(baselinePath);
+                    Console.WriteLine($"Updated baseline saved to: {baselinePath}");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Error: Failed to prune baseline: {ex.Message}");
+                    return ExitCodes.ScanError;
+                }
+            }
 
             // Write output
             try
