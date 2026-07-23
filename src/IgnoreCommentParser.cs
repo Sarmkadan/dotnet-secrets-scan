@@ -13,6 +13,8 @@ public static class IgnoreCommentParser
     /// <returns>True if the line should be ignored; otherwise false</returns>
     public static bool IsLineIgnored(string lineContent)
     {
+        ArgumentNullException.ThrowIfNull(lineContent);
+
         if (string.IsNullOrWhiteSpace(lineContent))
         {
             return false;
@@ -38,6 +40,12 @@ public static class IgnoreCommentParser
             return true;
         }
 
+        // Check for 'ignore next line' comments
+        if (trimmed.StartsWith("// secrets-scan:ignore-next-line", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         return false;
     }
 
@@ -50,6 +58,7 @@ public static class IgnoreCommentParser
     /// <returns>True if the line should be ignored; otherwise false</returns>
     public static bool IsLineIgnored(string[] fileLines, int lineNumber)
     {
+        ArgumentNullException.ThrowIfNull(fileLines);
         if (lineNumber < 1 || lineNumber > fileLines.Length)
         {
             return false;
@@ -71,6 +80,16 @@ public static class IgnoreCommentParser
             }
         }
 
+        // Check for 'ignore next line' comments
+        if (lineNumber > 1)
+        {
+            var previousLine = fileLines[lineNumber - 2];
+            if (previousLine.Trim().StartsWith("// secrets-scan:ignore-next-line", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -82,7 +101,10 @@ public static class IgnoreCommentParser
     /// <returns>Filtered list of secret findings with ignored ones removed</returns>
     public static IReadOnlyList<SecretFinding> Filter(IReadOnlyList<SecretFinding> findings, Func<string, string[]> fileReader)
     {
-        if (findings == null || findings.Count == 0)
+        ArgumentNullException.ThrowIfNull(findings);
+        ArgumentNullException.ThrowIfNull(fileReader);
+
+        if (findings.Count == 0)
         {
             return Array.Empty<SecretFinding>();
         }
@@ -97,6 +119,110 @@ public static class IgnoreCommentParser
                 if (lines != null && lines.Length >= finding.LineNumber)
                 {
                     if (!IsLineIgnored(lines, finding.LineNumber))
+                    {
+                        filtered.Add(finding);
+                    }
+                }
+                else
+                {
+                    // If we can't read the file, include the finding
+                    filtered.Add(finding);
+                }
+            }
+            catch
+            {
+                // If file reading fails, include the finding
+                filtered.Add(finding);
+            }
+        }
+
+        return filtered.AsReadOnly();
+    }
+
+    /// <summary>
+    /// Checks if a JSON line should be ignored based on its content.
+    /// </summary>
+    /// <param name="lineContent">The line content to check</param>
+    /// <returns>True if the line should be ignored; otherwise false</returns>
+    public static bool IsJsonLineIgnored(string lineContent)
+    {
+        ArgumentNullException.ThrowIfNull(lineContent);
+
+        if (string.IsNullOrWhiteSpace(lineContent))
+        {
+            return false;
+        }
+
+        var trimmed = lineContent.Trim();
+
+        // Check for JSON compatible suppression via a sibling key
+        if (trimmed.StartsWith("\"secrets-scan:ignore\"", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // Check for JSON compatible suppression via a trailing-line comment mode
+        if (trimmed.EndsWith("// secrets-scan:ignore", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Checks if a YAML line should be ignored based on its content.
+    /// </summary>
+    /// <param name="lineContent">The line content to check</param>
+    /// <returns>True if the line should be ignored; otherwise false</returns>
+    public static bool IsYamlLineIgnored(string lineContent)
+    {
+        ArgumentNullException.ThrowIfNull(lineContent);
+
+        if (string.IsNullOrWhiteSpace(lineContent))
+        {
+            return false;
+        }
+
+        var trimmed = lineContent.Trim();
+
+        // Check for YAML compatible suppression via a sibling key
+        if (trimmed.StartsWith("secrets-scan:ignore", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Filters a list of secret findings, removing those that should be ignored based on the rule ID.
+    /// </summary>
+    /// <param name="findings">List of secret findings to filter</param>
+    /// <param name="fileReader">Function to read file lines by path</param>
+    /// <param name="ruleId">The ID of the rule to filter by</param>
+    /// <returns>Filtered list of secret findings with ignored ones removed</returns>
+    public static IReadOnlyList<SecretFinding> FilterByRuleId(IReadOnlyList<SecretFinding> findings, Func<string, string[]> fileReader, string ruleId)
+    {
+        ArgumentNullException.ThrowIfNull(findings);
+        ArgumentNullException.ThrowIfNull(fileReader);
+        ArgumentNullException.ThrowIfNull(ruleId);
+
+        if (findings.Count == 0)
+        {
+            return Array.Empty<SecretFinding>();
+        }
+
+        var filtered = new List<SecretFinding>(findings.Count);
+
+        foreach (var finding in findings)
+        {
+            try
+            {
+                var lines = fileReader(finding.FilePath);
+                if (lines != null && lines.Length >= finding.LineNumber)
+                {
+                    if (finding.Rule == ruleId && !IsLineIgnored(lines, finding.LineNumber))
                     {
                         filtered.Add(finding);
                     }
