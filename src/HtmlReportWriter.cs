@@ -10,18 +10,37 @@ namespace DotnetSecretsScan;
 /// <summary>
 /// Generates an HTML report for a collection of secret findings.
 /// </summary>
-public sealed class HtmlReportWriter
+public sealed class HtmlReportWriter : IReportWriter
 {
+    /// <summary>
+    /// Gets the format identifier for this writer: "html".
+    /// </summary>
+    public string FormatName => "html";
+
+    /// <summary>
+    /// Renders the scan result as an HTML document and writes it to <paramref name="output"/>.
+    /// </summary>
+    /// <param name="result">The scan result to render.</param>
+    /// <param name="output">The writer that receives the rendered report.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> or <paramref name="output"/> is null.</exception>
+    public void Write(ScanResult result, TextWriter output)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(output);
+
+        output.Write(Generate(result.Findings));
+    }
+
     /// <summary>
     /// Generates a complete HTML document containing a table of findings and a summary per rule.
     /// </summary>
     /// <param name="findings">The secret findings to include in the report.</param>
     /// <param name="title">The title of the report. Defaults to "Secrets Scan Report".</param>
     /// <returns>A string containing the full HTML document.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="findings"/> is null.</exception>
     public string Generate(IReadOnlyList<SecretFinding> findings, string title = "Secrets Scan Report")
     {
-        if (findings is null)
-            throw new ArgumentNullException(nameof(findings));
+        ArgumentNullException.ThrowIfNull(findings);
 
         var sb = new StringBuilder();
 
@@ -168,8 +187,7 @@ public sealed class HtmlReportWriter
     /// <param name="path">The file system path where the HTML file will be saved.</param>
     public void WriteToFile(IReadOnlyList<SecretFinding> findings, string path)
     {
-        if (path is null)
-            throw new ArgumentNullException(nameof(path));
+        ArgumentNullException.ThrowIfNull(path);
 
         var html = Generate(findings);
         File.WriteAllText(path, html, Encoding.UTF8);

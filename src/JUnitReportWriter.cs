@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
@@ -7,23 +8,40 @@ using System.Xml.Linq;
 namespace DotnetSecretsScan;
 
 /// <summary>
-/// Provides methods to write scan results in JUnit XML format.
+/// Writes scan results in JUnit XML format.
 /// This format is commonly used by CI/CD systems to consume test failures.
 /// </summary>
-public static class JUnitReportWriter
+public sealed class JUnitReportWriter : IReportWriter
 {
+    /// <summary>
+    /// Gets the format identifier for this writer: "junit".
+    /// </summary>
+    public string FormatName => "junit";
+
+    /// <summary>
+    /// Renders the scan result as JUnit XML and writes it to <paramref name="output"/>.
+    /// </summary>
+    /// <param name="result">The scan result to render.</param>
+    /// <param name="output">The writer that receives the rendered report.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> or <paramref name="output"/> is null.</exception>
+    public void Write(ScanResult result, TextWriter output)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(output);
+
+        output.Write(ToJUnit(result));
+    }
+
     /// <summary>
     /// Converts a collection of secret findings to JUnit XML format.
     /// </summary>
     /// <param name="findings">The secret findings to convert.</param>
     /// <param name="scanTimestamp">The timestamp when the scan was performed.</param>
     /// <returns>JUnit XML representation of the findings.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="findings"/> is null.</exception>
     public static string ToJUnit(IEnumerable<SecretFinding> findings, DateTimeOffset scanTimestamp)
     {
-        if (findings is null)
-        {
-            throw new ArgumentNullException(nameof(findings));
-        }
+        ArgumentNullException.ThrowIfNull(findings);
 
         // Group findings by file path for testsuite organization
         var findingsByFile = findings

@@ -1,26 +1,44 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 
 namespace DotnetSecretsScan;
 
 /// <summary>
-/// Provides methods to write scan results in CSV format.
+/// Writes scan results in CSV format.
 /// </summary>
-public static class CsvReportWriter
+public sealed class CsvReportWriter : IReportWriter
 {
+    /// <summary>
+    /// Gets the format identifier for this writer: "csv".
+    /// </summary>
+    public string FormatName => "csv";
+
+    /// <summary>
+    /// Renders the scan result as CSV and writes it to <paramref name="output"/>.
+    /// </summary>
+    /// <param name="result">The scan result to render.</param>
+    /// <param name="output">The writer that receives the rendered report.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> or <paramref name="output"/> is null.</exception>
+    public void Write(ScanResult result, TextWriter output)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(output);
+
+        output.Write(ToCsv(result.Findings));
+    }
+
     /// <summary>
     /// Converts a collection of secret findings to CSV format.
     /// </summary>
     /// <param name="findings">The secret findings to convert.</param>
     /// <returns>CSV representation of the findings.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="findings"/> is null.</exception>
     public static string ToCsv(IEnumerable<SecretFinding> findings)
     {
-        if (findings is null)
-        {
-            throw new ArgumentNullException(nameof(findings));
-        }
+        ArgumentNullException.ThrowIfNull(findings);
 
         var sb = new StringBuilder();
 
@@ -48,15 +66,13 @@ public static class CsvReportWriter
     /// </summary>
     /// <param name="findings">The secret findings to write.</param>
     /// <param name="filePath">The file path where the CSV will be saved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="filePath"/> is null.</exception>
     public static void WriteToFile(IEnumerable<SecretFinding> findings, string filePath)
     {
-        if (filePath is null)
-        {
-            throw new ArgumentNullException(nameof(filePath));
-        }
+        ArgumentNullException.ThrowIfNull(filePath);
 
         var csv = ToCsv(findings);
-        System.IO.File.WriteAllText(filePath, csv, Encoding.UTF8);
+        File.WriteAllText(filePath, csv, Encoding.UTF8);
     }
 
     /// <summary>

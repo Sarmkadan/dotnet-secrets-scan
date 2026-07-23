@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -62,9 +62,9 @@ public sealed class ScanResult
 }
 
 /// <summary>
-/// Provides methods to write scan results in various formats.
+/// Writes scan results in JSON format.
 /// </summary>
-public static class ReportWriter
+public sealed class JsonReportWriter : IReportWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
@@ -74,62 +74,22 @@ public static class ReportWriter
     };
 
     /// <summary>
-    /// Writes scan results to the console with color-coded output by severity.
+    /// Gets the format identifier for this writer: "json".
     /// </summary>
-    /// <param name="result">The scan result to write.</param>
-    /// <param name="verbose">Whether to include additional details in the output.</param>
-    public static void WriteConsole(ScanResult result, bool verbose = false)
+    public string FormatName => "json";
+
+    /// <summary>
+    /// Renders the scan result as JSON and writes it to <paramref name="output"/>.
+    /// </summary>
+    /// <param name="result">The scan result to render.</param>
+    /// <param name="output">The writer that receives the rendered report.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> or <paramref name="output"/> is null.</exception>
+    public void Write(ScanResult result, TextWriter output)
     {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(output);
 
-        Console.WriteLine($"Scan completed: {result.TotalFilesScanned} files, {result.TotalLinesScanned} lines, {result.TotalFindings} findings");
-        Console.WriteLine($"Timestamp: {result.ScanTimestamp:yyyy-MM-dd HH:mm:ss zzz}");
-        Console.WriteLine();
-
-        if (result.TotalFindings == 0)
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("✓ No secrets found");
-            Console.ResetColor();
-            return;
-        }
-
-        // Group findings by severity
-        var findingsBySeverity = result.Findings
-            .GroupBy(f => f.Severity ?? "Unknown")
-            .OrderByDescending(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        foreach (var severityGroup in findingsBySeverity)
-        {
-            var severity = severityGroup.Key;
-            var findings = severityGroup.Value;
-            var count = findings.Count;
-            var color = GetSeverityColor(severity);
-
-            Console.ForegroundColor = color;
-            Console.WriteLine($"{severity}: {count} finding{(count == 1 ? "" : "s")}");
-            Console.ResetColor();
-
-            if (verbose)
-            {
-                foreach (var finding in findings.OrderBy(f => f.FilePath).ThenBy(f => f.LineNumber))
-                {
-                    Console.WriteLine($"  {finding.FilePath}:{finding.LineNumber} - {finding.Rule}");
-                    if (!string.IsNullOrEmpty(finding.Secret) && finding.Secret.Length > 50)
-                    {
-                        Console.WriteLine($"    Secret: {finding.Secret[..47]}...");
-                    }
-                    else if (!string.IsNullOrEmpty(finding.Secret))
-                    {
-                        Console.WriteLine($"    Secret: {finding.Secret}");
-                    }
-                }
-            }
-        }
+        output.Write(ToJson(result));
     }
 
     /// <summary>
@@ -137,93 +97,59 @@ public static class ReportWriter
     /// </summary>
     /// <param name="result">The scan result to serialize.</param>
     /// <returns>JSON representation of the scan result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
     public static string ToJson(ScanResult result)
     {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
+        ArgumentNullException.ThrowIfNull(result);
 
         return JsonSerializer.Serialize(result, JsonOptions);
     }
+}
+
+/// <summary>
+/// Provides thin, backward-compatible static entry points to the individual
+/// <see cref="IReportWriter"/> implementations for the various output formats.
+/// </summary>
+public static class ReportWriter
+{
+    /// <summary>
+    /// Writes scan results to the console with color-coded output by severity.
+    /// </summary>
+    /// <param name="result">The scan result to write.</param>
+    /// <param name="verbose">Whether to include additional details in the output.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
+    public static void WriteConsole(ScanResult result, bool verbose = false)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        new ConsoleReportWriter(verbose).Write(result, Console.Out);
+    }
+
+    /// <summary>
+    /// Converts a scan result to JSON format.
+    /// </summary>
+    /// <param name="result">The scan result to serialize.</param>
+    /// <returns>JSON representation of the scan result.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
+    public static string ToJson(ScanResult result) => JsonReportWriter.ToJson(result);
 
     /// <summary>
     /// Converts a scan result to SARIF 2.1.0 format for CI integration.
     /// </summary>
     /// <param name="result">The scan result to convert.</param>
     /// <returns>SARIF 2.1.0 JSON representation.</returns>
-    public static string ToSarif(ScanResult result)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        var sarif = new
-        {
-            version = "2.1.0",
-            schema = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
-            runs = new[]
-            {
-                new
-                {
-                    tool = new
-                    {
-                        driver = new
-                        {
-                            name = "DotnetSecretsScan",
-                            informationUri = "https://github.com/sarmkadan/dotnet-secrets-scan",
-                            version = "0.1.0",
-                            rules = new object[] { }
-                        }
-                    },
-                    results = result.Findings
-                        .Select(f => new
-                        {
-                            ruleId = f.Rule,
-                            level = MapSeverityToSarifLevel(f.Severity),
-                            message = new { text = $"Secret detected in {f.FilePath}:{f.LineNumber}" },
-                            locations = new[]
-                            {
-                                new
-                                {
-                                    physicalLocation = new
-                                    {
-                                        artifactLocation = new { uri = f.FilePath },
-                                        region = new
-                                        {
-                                            startLine = f.LineNumber,
-                                            startColumn = 1
-                                        }
-                                    }
-                                }
-                            },
-                            properties = new
-                            {
-                                severity = f.Severity,
-                                secretValue = f.Secret
-                            }
-                        })
-                        .ToArray(),
-                    columnKind = "utf16CodeUnits"
-                }
-            }
-        };
-
-        return JsonSerializer.Serialize(sarif, JsonOptions);
-    }
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
+    public static string ToSarif(ScanResult result) => SarifReportWriter.ToSarif(result);
 
     /// <summary>
     /// Converts a scan result to CSV format.
     /// </summary>
     /// <param name="result">The scan result to convert.</param>
     /// <returns>CSV representation of the findings.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
     public static string ToCsv(ScanResult result)
     {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
+        ArgumentNullException.ThrowIfNull(result);
 
         return CsvReportWriter.ToCsv(result.Findings);
     }
@@ -233,36 +159,6 @@ public static class ReportWriter
     /// </summary>
     /// <param name="result">The scan result to convert.</param>
     /// <returns>JUnit XML representation.</returns>
-    public static string ToJUnit(ScanResult result)
-    {
-        if (result is null)
-        {
-            throw new ArgumentNullException(nameof(result));
-        }
-
-        return JUnitReportWriter.ToJUnit(result);
-    }
-
-    private static ConsoleColor GetSeverityColor(string severity)
-    {
-        return severity?.Trim().ToLowerInvariant() switch
-        {
-            "high" => ConsoleColor.Red,
-            "critical" or "criticalerror" => ConsoleColor.DarkRed,
-            "medium" => ConsoleColor.Yellow,
-            "low" or "info" => ConsoleColor.Cyan,
-            _ => ConsoleColor.White
-        };
-    }
-
-    private static string MapSeverityToSarifLevel(string severity)
-    {
-        return severity?.Trim().ToLowerInvariant() switch
-        {
-            "high" or "critical" or "criticalerror" => "error",
-            "medium" => "warning",
-            "low" or "info" => "note",
-            _ => "warning"
-        };
-    }
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="result"/> is null.</exception>
+    public static string ToJUnit(ScanResult result) => JUnitReportWriter.ToJUnit(result);
 }

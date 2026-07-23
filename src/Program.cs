@@ -222,37 +222,34 @@ public static class Program
             // Write output
             try
             {
+                var reportWriters = new Dictionary<string, IReportWriter>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["console"] = new ConsoleReportWriter(verbose),
+                    ["json"] = new JsonReportWriter(),
+                    ["csv"] = new CsvReportWriter(),
+                    ["sarif"] = new SarifReportWriter(),
+                    ["junit"] = new JUnitReportWriter(),
+                    ["html"] = new HtmlReportWriter()
+                };
+
                 if (string.IsNullOrWhiteSpace(outputPath) || string.Equals(format, "console", StringComparison.OrdinalIgnoreCase))
                 {
                     // Write to console
-                    ReportWriter.WriteConsole(result, verbose);
+                    reportWriters["console"].Write(result, Console.Out);
+                }
+                else if (reportWriters.TryGetValue(format, out var writer))
+                {
+                    // Write to file
+                    using var stringWriter = new StringWriter();
+                    writer.Write(result, stringWriter);
+                    await File.WriteAllTextAsync(outputPath, stringWriter.ToString());
+                    Console.WriteLine($"Scan results written to: {outputPath}");
                 }
                 else
                 {
-                    // Write to file
-                    string outputContent;
-                    switch (format.ToLowerInvariant())
-                    {
-                        case "json":
-                            outputContent = ReportWriter.ToJson(result);
-                            break;
-                        case "csv":
-                            outputContent = ReportWriter.ToCsv(result);
-                            break;
-                        case "sarif":
-                            outputContent = ReportWriter.ToSarif(result);
-                            break;
-                        case "junit":
-                            outputContent = ReportWriter.ToJUnit(result);
-                            break;
-                        default:
-                            Console.Error.WriteLine($"Warning: Unsupported format '{format}'. Using console output.");
-                            ReportWriter.WriteConsole(result, verbose);
-                            return exitCode;
-                    }
-
-                    await File.WriteAllTextAsync(outputPath, outputContent);
-                    Console.WriteLine($"Scan results written to: {outputPath}");
+                    Console.Error.WriteLine($"Warning: Unsupported format '{format}'. Using console output.");
+                    reportWriters["console"].Write(result, Console.Out);
+                    return exitCode;
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
