@@ -4,6 +4,7 @@ using System.CommandLine;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using DotnetSecretsScan.Verification;
 
 namespace DotnetSecretsScan;
 
@@ -74,22 +75,31 @@ public static class Program
             IsRequired = false
         };
 
+        var verifyOption = new Option<bool>(
+            new[] { "--verify" },
+            "Opt-in: make a live, read-only API call per AWS/GitHub/Slack finding to check whether the credential is still active")
+        {
+            IsRequired = false
+        };
+
         rootCommand.AddArgument(pathArgument);
         rootCommand.AddOption(outputOption);
         rootCommand.AddOption(formatOption);
         rootCommand.AddOption(verboseOption);
         rootCommand.AddOption(baselineOption);
         rootCommand.AddOption(pruneBaselineOption);
+        rootCommand.AddOption(verifyOption);
 
         rootCommand.SetHandler(
-            (path, outputPath, format, verbose, baselinePath, pruneBaseline) =>
-                RunScan(path, outputPath, format, verbose, baselinePath, pruneBaseline),
+            (path, outputPath, format, verbose, baselinePath, pruneBaseline, verify) =>
+                RunScan(path, outputPath, format, verbose, baselinePath, pruneBaseline, verify),
             pathArgument,
             outputOption,
             formatOption,
             verboseOption,
             baselineOption,
-            pruneBaselineOption);
+            pruneBaselineOption,
+            verifyOption);
 
         return rootCommand;
     }
@@ -100,7 +110,8 @@ public static class Program
         string format,
         bool verbose,
         string? baselinePath,
-        bool pruneBaseline)
+        bool pruneBaseline,
+        bool verify)
     {
         try
         {
@@ -176,6 +187,12 @@ public static class Program
                 TotalLinesScanned = scanResult.TotalLinesScanned,
                 ScanTimestamp = scanResult.ScanTimestamp
             };
+
+            // Optionally verify findings against their issuing provider (live, opt-in, best-effort).
+            if (verify)
+            {
+                await VerifyFindingsAsync(result.Findings);
+            }
 
             // Determine exit code based on findings
             var exitCode = result.TotalFindings > 0 ? ExitCodes.Findings : ExitCodes.Success;
@@ -282,6 +299,32 @@ public static class Program
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return ExitCodes.ScanError;
+        }
+    }
+
+    /// <summary>
+    /// Runs live, opt-in verification against every finding whose rule is eligible (AWS access
+    /// keys, GitHub personal access tokens, Slack tokens) and stamps <see cref="SecretFinding.Verified"/>
+    /// with the outcome. Verification is best-effort: any network or provider failure degrades a
+    /// finding to "Unknown" rather than aborting the scan.
+    /// </summary>
+    /// <param name="findings">The findings to verify in place.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="findings"/> is <see langword="null"/>.</exception>
+    private static async Task VerifyFindingsAsync(IReadOnlyList<SecretFinding> findings)
+    {
+        ArgumentNullException.ThrowIfNull(findings);
+
+        using var verifier = new SecretVerifier();
+
+        foreach (var finding in findings)
+        {
+            if (SecretVerifier.ResolveProvider(finding.Rule) is null)
+            {
+                continue;
+            }
+
+            var status = await verifier.VerifyAsync(finding);
+            finding.Verified = status.ToString();
         }
     }
 }

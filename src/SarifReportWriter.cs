@@ -90,7 +90,8 @@ public sealed class SarifReportWriter : IReportWriter
                             properties = new
                             {
                                 severity = f.Severity,
-                                secretValue = f.Secret
+                                secretValue = f.Secret,
+                                verified = f.Verified
                             }
                         })
                         .ToArray(),

@@ -37,6 +37,13 @@ public sealed class SecretFinding : IEquatable<SecretFinding>
     public DateTime? Expires { get; set; }
 
     /// <summary>
+    /// Gets or sets the outcome of live verification against the issuing provider, when
+    /// verification was requested (<c>--verify</c>). One of "Active", "Inactive", or "Unknown".
+    /// Null when verification was not performed.
+    /// </summary>
+    public string? Verified { get; set; }
+
+    /// <summary>
     /// Computes a fingerprint for the finding based on its identifying properties.
     /// </summary>
     /// <returns>A SHA256 hash string representing the finding.</returns>

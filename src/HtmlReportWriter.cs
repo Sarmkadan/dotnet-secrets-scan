@@ -137,6 +137,7 @@ public sealed class HtmlReportWriter : IReportWriter
         sb.AppendLine(" <th>Rule</th>");
         sb.AppendLine(" <th>Severity</th>");
         sb.AppendLine(" <th>Secret</th>");
+        sb.AppendLine(" <th>Verified</th>");
         sb.AppendLine(" </tr>");
         sb.AppendLine(" </thead>");
         sb.AppendLine(" <tbody>");
@@ -150,6 +151,7 @@ public sealed class HtmlReportWriter : IReportWriter
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Rule)}</td>");
             sb.AppendLine($" <td><span class=\"severity-badge {severityClass}\">{WebUtility.HtmlEncode(f.Severity)}</span></td>");
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(MaskSecret(f.Secret))}</td>");
+            sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Verified ?? "Not checked")}</td>");
             sb.AppendLine(" </tr>");
         }
 
