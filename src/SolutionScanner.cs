@@ -206,13 +206,13 @@ public sealed class SolutionScanner
 
                 try
                 {
-                    var fileFindings = await ProcessFileAsync(filePath);
+                    var (fileFindings, fileLineCount) = await ProcessFileAsync(filePath);
                     foreach (var finding in fileFindings)
                     {
                         findingsBag.Add(finding);
                     }
                     Interlocked.Increment(ref filesScanned);
-                    Interlocked.Add(ref linesScanned, await CountLinesAsync(filePath));
+                    Interlocked.Add(ref linesScanned, fileLineCount);
                 }
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                 {
@@ -266,38 +266,63 @@ public sealed class SolutionScanner
     /// <returns>A list of <see cref="SecretFinding"/> objects representing detected secrets.</returns>
     private List<SecretFinding> ProcessFile(string filePath, out int lineCount)
     {
-        var fileContent = File.ReadAllText(filePath);
-        var lines = File.ReadAllLines(filePath);
+        var lines = ReadAllLinesStreaming(filePath);
         lineCount = lines.Length;
+        var fileContent = string.Join('\n', lines);
         return ProcessContent(fileContent, lines, filePath);
+    }
+
+    /// <summary>
+    /// Reads a text file line-by-line via a single streamed pass rather than buffering the whole
+    /// file twice (once for raw content, once for the line array), reducing peak memory usage
+    /// for large files.
+    /// </summary>
+    /// <param name="filePath">The path to the file to read.</param>
+    /// <returns>An array containing every line of the file.</returns>
+    private static string[] ReadAllLinesStreaming(string filePath)
+    {
+        var lines = new List<string>();
+        using var reader = new StreamReader(filePath);
+        while (reader.ReadLine() is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return lines.ToArray();
+    }
+
+    /// <summary>
+    /// Asynchronously reads a text file line-by-line via a single streamed pass rather than
+    /// buffering the whole file twice (once for raw content, once for the line array), reducing
+    /// peak memory usage for large files.
+    /// </summary>
+    /// <param name="filePath">The path to the file to read.</param>
+    /// <returns>An array containing every line of the file.</returns>
+    private static async Task<string[]> ReadAllLinesStreamingAsync(string filePath)
+    {
+        var lines = new List<string>();
+        using var reader = new StreamReader(filePath);
+        while (await reader.ReadLineAsync() is { } line)
+        {
+            lines.Add(line);
+        }
+
+        return lines.ToArray();
     }
 
     /// <summary>
     /// Asynchronously processes a single file to detect secrets using the configured rules and entropy analysis.
     /// </summary>
     /// <param name="filePath">The path to the file to process.</param>
-    /// <returns>A list of <see cref="SecretFinding"/> objects representing detected secrets.</returns>
-    private async Task<List<SecretFinding>> ProcessFileAsync(string filePath)
+    /// <returns>
+    /// A tuple containing the list of <see cref="SecretFinding"/> objects representing detected secrets
+    /// and the number of lines read from the file.
+    /// </returns>
+    private async Task<(List<SecretFinding> Findings, int LineCount)> ProcessFileAsync(string filePath)
     {
-        var fileContent = await File.ReadAllTextAsync(filePath);
-        var lines = await File.ReadAllLinesAsync(filePath);
-        return ProcessContent(fileContent, lines, filePath);
-    }
-
-    /// <summary>
-    /// Counts the number of lines in a file asynchronously.
-    /// </summary>
-    /// <param name="filePath">The path to the file to count lines in.</param>
-    /// <returns>The number of lines in the file.</returns>
-    private async Task<long> CountLinesAsync(string filePath)
-    {
-        using var reader = new StreamReader(filePath);
-        long lineCount = 0;
-        while (await reader.ReadLineAsync() is not null)
-        {
-            lineCount++;
-        }
-        return lineCount;
+        var lines = await ReadAllLinesStreamingAsync(filePath);
+        var fileContent = string.Join('\n', lines);
+        return (ProcessContent(fileContent, lines, filePath), lines.Length);
     }
 
     /// <summary>
@@ -332,6 +357,19 @@ public sealed class SolutionScanner
 file static class SecretRuleExtensions
 {
     /// <summary>
+    /// Per-file, per-rule regex match timeout. Bounds the worst case where a pathological rule
+    /// pattern exhibits catastrophic backtracking against a particular file's content, without
+    /// letting it hang the whole scan.
+    /// </summary>
+    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Cache of compiled regexes keyed by pattern, so each rule's pattern is compiled once for
+    /// the lifetime of the process instead of once per file.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, Regex?> CompiledRegexCache = new();
+
+    /// <summary>
     /// Matches the secret pattern defined by the rule against file content.
     /// </summary>
     /// <param name="rule">The secret rule containing the pattern to match.</param>
@@ -351,23 +389,25 @@ file static class SecretRuleExtensions
             yield break;
         }
 
-        Regex regex;
-        try
+        var regex = GetCompiledRegex(rule.Pattern);
+        if (regex is null)
         {
-            regex = new Regex(rule.Pattern, RegexOptions.Compiled, TimeSpan.FromSeconds(2));
-        }
-        catch (ArgumentException)
-        {
-            // Skip this rule if the pattern is invalid
-            yield break;
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            // Skip this file if regex compilation times out
+            // The pattern is invalid; skip this rule.
             yield break;
         }
 
-        var matches = regex.Matches(fileContent);
+        MatchCollection matches;
+        try
+        {
+            matches = regex.Matches(fileContent);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            Console.Error.WriteLine(
+                $"warning: rule '{rule.Id}' timed out after {MatchTimeout.TotalSeconds:0}s scanning content; skipping rule for this file.");
+            yield break;
+        }
+
         foreach (Match match in matches)
         {
             if (match.Success && match.Index >= 0)
@@ -400,4 +440,22 @@ file static class SecretRuleExtensions
             }
         }
     }
+
+    /// <summary>
+    /// Gets or compiles (and caches) the regex for the given pattern.
+    /// </summary>
+    /// <param name="pattern">The regular expression pattern to compile.</param>
+    /// <returns>The compiled <see cref="Regex"/>, or <c>null</c> if the pattern is invalid.</returns>
+    private static Regex? GetCompiledRegex(string pattern) =>
+        CompiledRegexCache.GetOrAdd(pattern, static p =>
+        {
+            try
+            {
+                return new Regex(p, RegexOptions.Compiled, MatchTimeout);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        });
 }

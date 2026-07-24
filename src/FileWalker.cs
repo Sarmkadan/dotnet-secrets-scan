@@ -10,13 +10,25 @@ namespace DotnetSecretsScan;
 /// </summary>
 public sealed class FileWalker
 {
+    private const int BinarySniffLength = 8192;
+
+    /// <summary>
+    /// Default maximum file size, in bytes, that will be processed when no explicit cap is supplied.
+    /// </summary>
+    public const long DefaultMaxFileSizeBytes = 1024 * 1024;
+
     private readonly HashSet<string> _excludePatterns;
     private readonly long _maxFileSizeBytes;
 
     /// <summary>
-    /// Gets the number of files that were skipped because they exceeded <see cref="MaxFileSizeBytes"/>.
+    /// Gets the number of files that were skipped because they exceeded the configured maximum size.
     /// </summary>
     public int SkippedFileCount { get; private set; }
+
+    /// <summary>
+    /// Gets the number of files that were skipped because they were detected as binary content.
+    /// </summary>
+    public int SkippedBinaryFileCount { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileWalker"/> class.
@@ -24,9 +36,9 @@ public sealed class FileWalker
     /// <param name="excludeGlobs">Optional additional glob patterns to exclude from enumeration.</param>
     /// <param name="maxFileSizeBytes">
     /// Optional maximum file size (in bytes) to process. Files larger than this value will be skipped.
-    /// Defaults to <c>long.MaxValue</c> (no size limit).
+    /// Defaults to <see cref="DefaultMaxFileSizeBytes"/> (1 MB).
     /// </param>
-    public FileWalker(IEnumerable<string>? excludeGlobs = null, long maxFileSizeBytes = long.MaxValue)
+    public FileWalker(IEnumerable<string>? excludeGlobs = null, long maxFileSizeBytes = DefaultMaxFileSizeBytes)
     {
         _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -69,8 +81,9 @@ public sealed class FileWalker
             throw new DirectoryNotFoundException($"Directory not found: {rootPath}");
         }
 
-        // Reset the skipped file counter for each new enumeration run.
+        // Reset the skipped file counters for each new enumeration run.
         SkippedFileCount = 0;
+        SkippedBinaryFileCount = 0;
 
         var searchOption = SearchOption.AllDirectories;
         var dirInfo = new DirectoryInfo(rootPath);
@@ -129,10 +142,52 @@ public sealed class FileWalker
             }
 
             var extension = file.Extension.ToLowerInvariant();
-            if (extension is ".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env")
+            if (extension is not (".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env"))
             {
-                yield return file.FullName;
+                continue;
             }
+
+            if (IsLikelyBinary(file.FullName))
+            {
+                SkippedBinaryFileCount++;
+                continue;
+            }
+
+            yield return file.FullName;
+        }
+    }
+
+    /// <summary>
+    /// Determines whether a file is likely binary by sniffing the first <see cref="BinarySniffLength"/> bytes
+    /// for a NUL byte, a common heuristic for distinguishing text from binary content.
+    /// </summary>
+    /// <param name="filePath">The path to the file to inspect.</param>
+    /// <returns><c>true</c> if the file appears to be binary or cannot be read; otherwise, <c>false</c>.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null or whitespace.</exception>
+    public static bool IsLikelyBinary(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            Span<byte> buffer = stackalloc byte[BinarySniffLength];
+            var bytesRead = stream.Read(buffer);
+
+            for (var i = 0; i < bytesRead; i++)
+            {
+                if (buffer[i] == 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Treat unreadable files as binary so they are safely skipped rather than crashing the scan.
+            return true;
         }
     }
 }
