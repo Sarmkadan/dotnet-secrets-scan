@@ -12,6 +12,26 @@ public sealed class FileWalker
 {
     private const int BinarySniffLength = 8192;
 
+    private static readonly HashSet<string> DirectoryExclusions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin",
+        "obj",
+        ".git",
+        "node_modules"
+    };
+
+    private static readonly HashSet<string> BinaryExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".dll",
+        ".exe",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".zip",
+        ".pdf"
+    };
+
     /// <summary>
     /// Default maximum file size, in bytes, that will be processed when no explicit cap is supplied.
     /// </summary>
@@ -40,13 +60,7 @@ public sealed class FileWalker
     /// </param>
     public FileWalker(IEnumerable<string>? excludeGlobs = null, long maxFileSizeBytes = DefaultMaxFileSizeBytes)
     {
-        _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "bin",
-            "obj",
-            "node_modules",
-            ".git"
-        };
+        _excludePatterns = new HashSet<string>(DirectoryExclusions, StringComparer.OrdinalIgnoreCase);
 
         if (excludeGlobs != null)
         {
@@ -142,7 +156,7 @@ public sealed class FileWalker
             }
 
             var extension = file.Extension.ToLowerInvariant();
-            if (extension is not (".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env"))
+        if (extension is not (".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env") || BinaryExtensions.Contains(extension))
             {
                 continue;
             }
