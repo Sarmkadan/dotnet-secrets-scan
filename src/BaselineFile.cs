@@ -142,6 +142,10 @@ public sealed class SecretFinding : IEquatable<SecretFinding>
 
 /// <summary>
 /// Manages a baseline of known/accepted secret findings.
+/// The baseline is stored as a JSON array of <see cref="SecretFinding"/> objects,
+/// each containing file path, line number, rule, secret, severity, optional expiry,
+/// and verification status. The baseline can be loaded, saved, filtered, and
+/// pruned to keep it in sync with the current code base.
 /// </summary>
 public sealed class BaselineFile
 {
@@ -149,7 +153,7 @@ public sealed class BaselineFile
     private readonly List<SecretFinding> _findings = new();
 
     /// <summary>
-    /// Gets the list of findings in the baseline.
+    /// Gets the list of findings in the baseline as a read‑only collection.
     /// </summary>
     public IReadOnlyList<SecretFinding> Findings => _findings.AsReadOnly();
 
