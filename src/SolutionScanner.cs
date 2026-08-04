@@ -12,6 +12,13 @@ namespace DotnetSecretsScan;
 /// <summary>
 /// Scans .NET solution directories for secrets and sensitive information using configurable rules.
 /// </summary>
+/// <remarks>
+/// This class implements a comprehensive secret scanning solution that detects various types of
+/// sensitive information including API keys, connection strings, passwords, and other credentials
+/// using configurable regex rules and entropy analysis. The scanner is designed to be used in
+/// security scanning tools and pre-commit hooks to prevent accidental commitment of secrets to
+/// version control systems.
+/// </remarks>
 public sealed class SolutionScanner
 {
     /// <summary>
