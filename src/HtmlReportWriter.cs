@@ -145,11 +145,11 @@ public sealed class HtmlReportWriter : IReportWriter
         foreach (var f in findings)
         {
             var severityClass = GetSeverityClass(f.Severity);
-            sb.AppendLine(" <tr class=\"severity-row\" data-severity=\"" + severityClass + "\">");
+            sb.AppendLine($" <tr class=\"severity-row\" data-severity=\"{WebUtility.HtmlEncode(severityClass)}\">");
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.FilePath)}</td>");
             sb.AppendLine($" <td>{f.LineNumber}</td>");
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Rule)}</td>");
-            sb.AppendLine($" <td><span class=\"severity-badge {severityClass}\">{WebUtility.HtmlEncode(f.Severity)}</span></td>");
+            sb.AppendLine($" <td><span class=\"severity-badge {WebUtility.HtmlEncode(severityClass)}\">{WebUtility.HtmlEncode(f.Severity)}</span></td>");
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(MaskSecret(f.Secret))}</td>");
             sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Verified ?? "Not checked")}</td>");
             sb.AppendLine(" </tr>");
