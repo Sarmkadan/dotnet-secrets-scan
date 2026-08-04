@@ -133,7 +133,7 @@ public static class EntropyDetector
 
         settings ??= EntropyDetectionSettings.Default;
 
-        if (lines.Length == 0)
+        if (lines.Length == 0 || (lines.Length == 1 && string.IsNullOrWhiteSpace(lines[0])))
         {
             yield break;
         }
