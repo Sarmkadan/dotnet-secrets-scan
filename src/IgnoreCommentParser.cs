@@ -13,7 +13,7 @@ public static class IgnoreCommentParser
     /// <returns>True if the line should be ignored; otherwise false</returns>
     public static bool IsLineIgnored(string lineContent)
     {
-        ArgumentNullException.ThrowIfNull(lineContent);
+        ArgumentException.ThrowIfNullOrEmpty(lineContent);
 
         if (string.IsNullOrWhiteSpace(lineContent))
         {
@@ -146,7 +146,7 @@ public static class IgnoreCommentParser
     /// <returns>True if the line should be ignored; otherwise false</returns>
     public static bool IsJsonLineIgnored(string lineContent)
     {
-        ArgumentNullException.ThrowIfNull(lineContent);
+        ArgumentException.ThrowIfNullOrEmpty(lineContent);
 
         if (string.IsNullOrWhiteSpace(lineContent))
         {
@@ -177,7 +177,7 @@ public static class IgnoreCommentParser
     /// <returns>True if the line should be ignored; otherwise false</returns>
     public static bool IsYamlLineIgnored(string lineContent)
     {
-        ArgumentNullException.ThrowIfNull(lineContent);
+        ArgumentException.ThrowIfNullOrEmpty(lineContent);
 
         if (string.IsNullOrWhiteSpace(lineContent))
         {
@@ -206,7 +206,7 @@ public static class IgnoreCommentParser
     {
         ArgumentNullException.ThrowIfNull(findings);
         ArgumentNullException.ThrowIfNull(fileReader);
-        ArgumentNullException.ThrowIfNull(ruleId);
+        ArgumentException.ThrowIfNullOrEmpty(ruleId);
 
         if (findings.Count == 0)
         {
