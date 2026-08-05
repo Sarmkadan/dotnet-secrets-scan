@@ -68,7 +68,7 @@ public static class EntropyDetector
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="s"/> is null.</exception>
     public static double ShannonEntropy(string s)
     {
-        ArgumentNullException.ThrowIfNull(s);
+        ArgumentException.ThrowIfNullOrEmpty(s);
 
         if (string.IsNullOrEmpty(s))
         {
@@ -117,7 +117,7 @@ public static class EntropyDetector
     }
 
     /// <summary>
-    /// Scans file lines for potential secrets based on entropy threshold.
+    /// Scans file lines for potential secrets based based on entropy threshold.
     /// </summary>
     /// <param name="filePath">Path to the file being scanned.</param>
     /// <param name="lines">File content lines.</param>
@@ -129,6 +129,7 @@ public static class EntropyDetector
         string[] lines,
         EntropyDetectionSettings? settings = null)
     {
+        ArgumentException.ThrowIfNullOrEmpty(filePath);
         ArgumentNullException.ThrowIfNull(lines);
 
         settings ??= EntropyDetectionSettings.Default;
