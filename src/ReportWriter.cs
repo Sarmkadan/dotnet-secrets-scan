@@ -59,6 +59,12 @@ public sealed class ScanResult
     /// Gets the total number of findings.
     /// </summary>
     public int TotalFindings => Findings.Count;
+
+    /// <summary>
+    /// Returns a concise, informative string representation of this scan result.
+    /// </summary>
+    /// <returns>A string containing the key properties of the scan result.</returns>
+    public override string ToString() => $"ScanResult {{ Findings = {Findings}, TotalFilesScanned = {TotalFilesScanned}, TotalLinesScanned = {TotalLinesScanned}, ScanTimestamp = {ScanTimestamp} }}";
 }
 
 /// <summary>
