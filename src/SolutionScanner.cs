@@ -85,7 +85,7 @@ public sealed class SolutionScanner
         try
         {
             var fileWalker = new FileWalker();
-            var files = fileWalker.EnumerateFiles(rootPath).ToList();
+            var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions
             {
@@ -199,7 +199,7 @@ public sealed class SolutionScanner
             cancellationToken.ThrowIfCancellationRequested();
 
             var fileWalker = new FileWalker();
-            var files = fileWalker.EnumerateFiles(rootPath).ToList();
+            var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions
             {

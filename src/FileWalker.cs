@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 
 namespace DotnetSecretsScan;
 
@@ -80,10 +81,12 @@ public sealed class FileWalker
     /// Recursively enumerates files in the specified directory.
     /// </summary>
     /// <param name="rootPath">Root directory to start enumeration from.</param>
+    /// <param name="cancellationToken">A cancellation token to observe while enumerating files.</param>
     /// <returns>Collection of file paths matching allowed extensions.</returns>
     /// <exception cref="ArgumentNullException">Thrown when rootPath is null.</exception>
     /// <exception cref="DirectoryNotFoundException">Thrown when rootPath does not exist.</exception>
-    public IEnumerable<string> EnumerateFiles(string rootPath)
+    /// <exception cref="OperationCanceledException">Thrown when the operation is cancelled.</exception>
+    public IEnumerable<string> EnumerateFiles(string rootPath, CancellationToken cancellationToken = default)
     {
         if (rootPath == null)
         {
@@ -95,6 +98,8 @@ public sealed class FileWalker
             throw new DirectoryNotFoundException($"Directory not found: {rootPath}");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Reset the skipped file counters for each new enumeration run.
         SkippedFileCount = 0;
         SkippedBinaryFileCount = 0;
@@ -102,10 +107,10 @@ public sealed class FileWalker
         var searchOption = SearchOption.AllDirectories;
         var dirInfo = new DirectoryInfo(rootPath);
 
-        return EnumerateFilesInternal(dirInfo, searchOption);
+        return EnumerateFilesInternal(dirInfo, searchOption, cancellationToken);
     }
 
-    private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo directory, SearchOption searchOption)
+    private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo directory, SearchOption searchOption, CancellationToken cancellationToken)
     {
         // EnumerateFiles is lazy: exceptions surface during iteration, not at the call site,
         // so a try/catch around the call alone would not protect the foreach below. Use
@@ -121,6 +126,8 @@ public sealed class FileWalker
 
         foreach (var file in files)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Skip files that exceed the configured maximum size.
             if (file.Length > _maxFileSizeBytes)
             {
