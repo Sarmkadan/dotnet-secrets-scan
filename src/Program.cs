@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.CommandLine;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -56,7 +57,7 @@ public static class Program
 
         var verboseOption = new Option<bool>(
             new[] { "--verbose", "-v" },
-            "Show detailed findings in console output")
+            "Show detailed findings and diagnostic scan information")
         {
             IsRequired = false
         };
@@ -113,6 +114,8 @@ public static class Program
         bool pruneBaseline,
         bool verify)
     {
+        var totalStopwatch = Stopwatch.StartNew();
+
         try
         {
             // Validate path
@@ -151,6 +154,7 @@ public static class Program
                 }
                 catch (Exception ex)
                 {
+                    Log(verbose, $"phase=baseline status=error exception={ex}");
                     Console.Error.WriteLine($"Error: Failed to load baseline file: {ex.Message}");
                     return ExitCodes.ScanError;
                 }
@@ -159,18 +163,39 @@ public static class Program
             // Create scanner with built-in rules
             var rules = BuiltInRules.All.Concat(CloudProviderRules.All).ToList();
             var scanner = new SolutionScanner(rules);
+            Log(verbose, $"event=scan_start root={path} ruleCount={rules.Count}");
+
+            var filesSkipped = 0;
+            if (verbose && path != "-" && Directory.Exists(path))
+            {
+                var discoveryStopwatch = Stopwatch.StartNew();
+                var diagnosticFileWalker = new FileWalker();
+                _ = diagnosticFileWalker.EnumerateFiles(path).Count();
+                discoveryStopwatch.Stop();
+                filesSkipped = diagnosticFileWalker.SkippedFileCount
+                    + diagnosticFileWalker.SkippedBinaryFileCount;
+                Log(
+                    verbose,
+                    $"phase=discovery status=complete duration={discoveryStopwatch.Elapsed.TotalMilliseconds:F3}ms filesSkipped={filesSkipped}");
+            }
 
             // Perform scan
             ScanResult scanResult;
+            var scanStopwatch = Stopwatch.StartNew();
             try
             {
                 scanResult = scanner.Scan(path);
+                scanStopwatch.Stop();
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
             {
+                scanStopwatch.Stop();
+                Log(verbose, $"phase=scan status=error duration={scanStopwatch.Elapsed.TotalMilliseconds:F3}ms exception={ex}");
                 Console.Error.WriteLine($"Error: Failed to scan path '{path}': {ex.Message}");
                 return ExitCodes.ScanError;
             }
+
+            Log(verbose, $"phase=scan status=complete duration={scanStopwatch.Elapsed.TotalMilliseconds:F3}ms");
 
             // Filter findings against baseline if provided
             var findings = scanResult.Findings;
@@ -187,6 +212,16 @@ public static class Program
                 TotalLinesScanned = scanResult.TotalLinesScanned,
                 ScanTimestamp = scanResult.ScanTimestamp
             };
+
+            var severityCountsForDiagnostics = result.FindingsBySeverity;
+            var severityDiagnostics = string.Join(
+                " ",
+                new[] { "Critical", "High", "Medium", "Low", "Info" }
+                    .Select(severity =>
+                        $"findings{severity}={severityCountsForDiagnostics.GetValueOrDefault(severity)}"));
+            Log(
+                verbose,
+                $"event=scan_counts filesScanned={result.TotalFilesScanned} filesSkipped={filesSkipped} findingsTotal={result.TotalFindings} {severityDiagnostics}");
 
             // Optionally verify findings against their issuing provider (live, opt-in, best-effort).
             if (verify)
@@ -231,6 +266,7 @@ public static class Program
                 }
                 catch (Exception ex)
                 {
+                    Log(verbose, $"phase=baseline_prune status=error exception={ex}");
                     Console.Error.WriteLine($"Error: Failed to prune baseline: {ex.Message}");
                     return ExitCodes.ScanError;
                 }
@@ -271,6 +307,7 @@ public static class Program
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
+                Log(verbose, $"phase=output status=error exception={ex}");
                 Console.Error.WriteLine($"Error: Failed to write output: {ex.Message}");
                 return ExitCodes.ScanError;
             }
@@ -293,12 +330,24 @@ public static class Program
             Console.WriteLine();
             Console.WriteLine($"Summary: {result.TotalFilesScanned} files, {result.TotalLinesScanned} lines scanned, {result.TotalFindings} findings ({severitySummary})");
 
+            totalStopwatch.Stop();
+            Log(verbose, $"event=scan_complete duration={totalStopwatch.Elapsed.TotalMilliseconds:F3}ms exitCode={exitCode}");
             return exitCode;
         }
         catch (Exception ex)
         {
+            totalStopwatch.Stop();
+            Log(verbose, $"event=scan_error duration={totalStopwatch.Elapsed.TotalMilliseconds:F3}ms exception={ex}");
             Console.Error.WriteLine($"Error: {ex.Message}");
             return ExitCodes.ScanError;
+        }
+    }
+
+    private static void Log(bool verbose, string message)
+    {
+        if (verbose)
+        {
+            Console.Error.WriteLine($"{DateTimeOffset.UtcNow:O} {message}");
         }
     }
 
