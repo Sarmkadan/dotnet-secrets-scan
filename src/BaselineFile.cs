@@ -68,7 +68,7 @@ public sealed class SecretFinding : IEquatable<SecretFinding>
 
         // Create a consistent string representation for fingerprinting
         // Use relative path for better portability across different systems
-        var relativePath = GetRelativePath(finding.FilePath);
+        var relativePath = GetRelativePath(finding.FilePath).Replace('\\', '/');
         var fingerprintString = $"{relativePath}|{finding.Rule}|{finding.Secret}";
 
         using var sha256 = System.Security.Cryptography.SHA256.Create();
@@ -171,13 +171,24 @@ public sealed class BaselineFile
             throw new ArgumentNullException(nameof(path));
         }
 
-        if (!System.IO.File.Exists(path))
+        try
         {
-            return new BaselineFile();
-        }
+            if (!System.IO.File.Exists(path))
+            {
+                return new BaselineFile();
+            }
 
-        var json = System.IO.File.ReadAllText(path);
-        return FromJson(json);
+            var json = System.IO.File.ReadAllText(path);
+            return FromJson(json);
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            throw new InvalidDataException($"Failed to load baseline file '{path}': the file does not contain valid JSON.", ex);
+        }
+        catch (IOException ex)
+        {
+            throw new InvalidDataException($"Failed to load baseline file '{path}': the file could not be read.", ex);
+        }
     }
 
     /// <summary>
@@ -301,7 +312,19 @@ public sealed class BaselineFile
             PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
         });
 
-        System.IO.File.WriteAllText(path, json);
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath)!;
+        var tempPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            System.IO.File.WriteAllText(tempPath, json);
+            System.IO.File.Move(tempPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            System.IO.File.Delete(tempPath);
+        }
     }
 
     /// <summary>
