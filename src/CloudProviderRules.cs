@@ -10,14 +10,14 @@ public static class CloudProviderRules
     {
         // ... existing rules ...
 
-        new SecretRule(
+        CreateRule(
             "SqlServerConnectionString",
             "SQL Server Connection String with Inline Password",
             @"Server=[^;]+;Data Source=[^;]+;Password=[^;]+",
             "Detects SQL Server connection strings with inline password",
             SecretSeverity.High),
 
-        new SecretRule(
+        CreateRule(
             "MongoDbUri",
             "MongoDB URI with Credentials",
             @"mongodb(?:\+srv)?://[^:]+:[^@]+@",
@@ -26,4 +26,12 @@ public static class CloudProviderRules
 
         // ... existing rules ...
     };
+
+    private static SecretRule CreateRule(
+        string id,
+        string name,
+        string pattern,
+        string description,
+        SecretSeverity severity) =>
+        new(id, name, pattern, description, severity);
 }

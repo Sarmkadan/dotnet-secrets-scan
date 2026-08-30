@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 namespace DotnetSecretsScan;
 
@@ -28,6 +30,8 @@ public enum SecretSeverity
 /// </summary>
 public class SecretRule
 {
+    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
+
     /// <summary>
     /// Gets the rule identifier (e.g., SS001).
     /// </summary>
@@ -42,6 +46,11 @@ public class SecretRule
     /// Gets the regex pattern to match secrets.
     /// </summary>
     public string Pattern { get; }
+
+    /// <summary>
+    /// Gets the compiled regular expression used to match secrets.
+    /// </summary>
+    public Regex Regex { get; }
 
     /// <summary>
     /// Gets the description of what this rule matches.
@@ -66,6 +75,7 @@ public class SecretRule
         Id = id;
         Name = name;
         Pattern = pattern;
+        Regex = new Regex(pattern, RegexOptions.Compiled, MatchTimeout);
         Description = description;
         Severity = severity;
     }
@@ -82,7 +92,7 @@ public static class BuiltInRules
     public static IReadOnlyList<SecretRule> All = new List<SecretRule>
     {
         // AWS Access Keys
-        new SecretRule(
+        CreateRule(
             id: "SS001",
             name: "AWS Access Key ID",
             pattern: @"AKIA[0-9A-Z]{16}",
@@ -91,7 +101,7 @@ public static class BuiltInRules
         ),
 
         // AWS Secret Access Key
-        new SecretRule(
+        CreateRule(
             id: "SS002",
             name: "AWS Secret Access Key",
             pattern: @"aws(.{0,20})?(?i)(secret|private)(.{0,20})?[0-9a-z/+=]{40}",
@@ -100,7 +110,7 @@ public static class BuiltInRules
         ),
 
         // Private keys (RSA, DSA, EC, OpenSSH)
-        new SecretRule(
+        CreateRule(
             id: "SS003",
             name: "Private Key",
             pattern: @"-----BEGIN (RSA|DSA|EC|OPENSSH|PGP|SSH|PUBLIC|PRIVATE|ENCRYPTED) (.+?)-----",
@@ -109,7 +119,7 @@ public static class BuiltInRules
         ),
 
         // Connection strings with Password
-        new SecretRule(
+        CreateRule(
             id: "SS004",
             name: "Connection String with Password",
             pattern: @"(?:Server|Data Source|Host|Database|Addr|Address)=[^;]+;.*?(?:Password|pwd|PWD)=[^;]+",
@@ -118,7 +128,7 @@ public static class BuiltInRules
         ),
 
         // Bearer tokens and JWT
-        new SecretRule(
+        CreateRule(
             id: "SS005",
             name: "Bearer Token/JWT",
             pattern: @"Bearer [a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]*",
@@ -127,7 +137,7 @@ public static class BuiltInRules
         ),
 
         // JWT
-        new SecretRule(
+        CreateRule(
             id: "JWT001",
             name: "JSON Web Token",
             pattern: @"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}",
@@ -136,7 +146,7 @@ public static class BuiltInRules
         ),
 
         // GitHub Personal Access Token
-        new SecretRule(
+        CreateRule(
             id: "SS006",
             name: "GitHub Personal Access Token",
             pattern: @"ghp_[a-zA-Z0-9]{36}",
@@ -145,7 +155,7 @@ public static class BuiltInRules
         ),
 
         // GitHub OAuth Token
-        new SecretRule(
+        CreateRule(
             id: "SS007",
             name: "GitHub OAuth Token",
             pattern: @"gho_[a-zA-Z0-9]{36}",
@@ -154,7 +164,7 @@ public static class BuiltInRules
         ),
 
         // Slack tokens
-        new SecretRule(
+        CreateRule(
             id: "SS008",
             name: "Slack Token",
             pattern: @"xox[baprs]-[a-zA-Z0-9-]+",
@@ -163,7 +173,7 @@ public static class BuiltInRules
         ),
 
         // Generic API key
-        new SecretRule(
+        CreateRule(
             id: "SS009",
             name: "Generic API Key",
             pattern: @"api[_-]?key[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
@@ -172,7 +182,7 @@ public static class BuiltInRules
         ),
 
         // Generic secret
-        new SecretRule(
+        CreateRule(
             id: "SS010",
             name: "Generic Secret",
             pattern: @"secret[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
@@ -181,7 +191,7 @@ public static class BuiltInRules
         ),
 
         // Generic private key
-        new SecretRule(
+        CreateRule(
             id: "SS011",
             name: "Generic Private Key",
             pattern: @"private[\s:=]{0,5}[\""]?[a-zA-Z0-9]{32,}[\""]?",
@@ -190,7 +200,7 @@ public static class BuiltInRules
         ),
 
         // Telegram Bot Token
-        new SecretRule(
+        CreateRule(
             id: "SS012",
             name: "Telegram Bot Token",
             pattern: @"[0-9]{9,10}:[a-zA-Z0-9_-]{35}",
@@ -199,7 +209,7 @@ public static class BuiltInRules
         ),
 
         // Stripe API Key
-        new SecretRule(
+        CreateRule(
             id: "SS013",
             name: "Stripe API Key",
             pattern: @"sk_live_[0-9a-zA-Z]{24}",
@@ -208,7 +218,7 @@ public static class BuiltInRules
         ),
 
         // Stripe Publishable Key
-        new SecretRule(
+        CreateRule(
             id: "SS014",
             name: "Stripe Publishable Key",
             pattern: @"pk_live_[0-9a-zA-Z]{24}",
@@ -217,7 +227,7 @@ public static class BuiltInRules
         ),
 
         // Google API Key
-        new SecretRule(
+        CreateRule(
             id: "SS015",
             name: "Google API Key",
             pattern: @"AIza[0-9A-Za-z\-_]{35}",
@@ -226,7 +236,7 @@ public static class BuiltInRules
         ),
 
         // Basic Auth credentials
-        new SecretRule(
+        CreateRule(
             id: "SS016",
             name: "Basic Auth Credentials",
             pattern: @"(?:Authorization|Proxy-Authorization): Basic [a-zA-Z0-9\+/=]{10,}",
@@ -235,7 +245,7 @@ public static class BuiltInRules
         ),
 
         // NPM token
-        new SecretRule(
+        CreateRule(
             id: "SS017",
             name: "NPM Token",
             pattern: @"npm_[a-zA-Z0-9]{36}",
@@ -244,7 +254,7 @@ public static class BuiltInRules
         ),
 
         // NuGet API Key
-        new SecretRule(
+        CreateRule(
             id: "SS018",
             name: "NuGet API Key",
             pattern: @"oy2[a-zA-Z0-9]{32}",
@@ -253,7 +263,7 @@ public static class BuiltInRules
         ),
 
         // GitHub Fine-Grained Personal Access Token
-        new SecretRule(
+        CreateRule(
             id: "SS019",
             name: "GitHub Fine-Grained PAT",
             pattern: @"github_pat_[A-Za-z0-9_]{40}",
@@ -261,4 +271,12 @@ public static class BuiltInRules
             severity: SecretSeverity.High
         )
     };
+
+    private static SecretRule CreateRule(
+        string id,
+        string name,
+        string pattern,
+        string description,
+        SecretSeverity severity) =>
+        new(id, name, pattern, description, severity);
 }
