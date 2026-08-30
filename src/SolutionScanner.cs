@@ -21,6 +21,12 @@ namespace DotnetSecretsScan;
 /// </remarks>
 public sealed class SolutionScanner
 {
+    private const string StdinPathSentinel = "-";
+    private const string StdinPseudoFilePath = "<stdin>";
+    private const char FileContentLineSeparator = '\n';
+    private static readonly string[] StdinLineSeparators = { "\r\n", "\r", "\n" };
+    private static readonly int MaxDegreeOfParallelism = Environment.ProcessorCount;
+
     /// <summary>
     /// The collection of secret detection rules to apply during scanning.
     /// </summary>
@@ -54,13 +60,13 @@ public sealed class SolutionScanner
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (rootPath == "-")
+        if (rootPath == StdinPathSentinel)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var content = Console.In.ReadToEnd();
             cancellationToken.ThrowIfCancellationRequested();
-            var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-            var findings = ProcessContent(content, lines, "<stdin>");
+            var lines = content.Split(StdinLineSeparators, StringSplitOptions.None);
+            var findings = ProcessContent(content, lines, StdinPseudoFilePath);
             stopwatch.Stop();
             return new ScanResult
             {
@@ -89,7 +95,7 @@ public sealed class SolutionScanner
 
             var parallelOptions = new ParallelOptions
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                MaxDegreeOfParallelism = MaxDegreeOfParallelism,
                 CancellationToken = cancellationToken
             };
 
@@ -166,13 +172,13 @@ public sealed class SolutionScanner
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (rootPath == "-")
+        if (rootPath == StdinPathSentinel)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var content = await Console.In.ReadToEndAsync();
             cancellationToken.ThrowIfCancellationRequested();
-            var lines = content.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-            var findings = ProcessContent(content, lines, "<stdin>");
+            var lines = content.Split(StdinLineSeparators, StringSplitOptions.None);
+            var findings = ProcessContent(content, lines, StdinPseudoFilePath);
             stopwatch.Stop();
             return new ScanResult
             {
@@ -203,7 +209,7 @@ public sealed class SolutionScanner
 
             var parallelOptions = new ParallelOptions
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                MaxDegreeOfParallelism = MaxDegreeOfParallelism,
                 CancellationToken = cancellationToken
             };
 
@@ -275,7 +281,7 @@ public sealed class SolutionScanner
     {
         var lines = ReadAllLinesStreaming(filePath);
         lineCount = lines.Length;
-        var fileContent = string.Join('\n', lines);
+        var fileContent = string.Join(FileContentLineSeparator, lines);
         return ProcessContent(fileContent, lines, filePath);
     }
 
@@ -328,7 +334,7 @@ public sealed class SolutionScanner
     private async Task<(List<SecretFinding> Findings, int LineCount)> ProcessFileAsync(string filePath)
     {
         var lines = await ReadAllLinesStreamingAsync(filePath);
-        var fileContent = string.Join('\n', lines);
+        var fileContent = string.Join(FileContentLineSeparator, lines);
         return (ProcessContent(fileContent, lines, filePath), lines.Length);
     }
 
