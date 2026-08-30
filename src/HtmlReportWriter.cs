@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -50,7 +51,7 @@ public sealed class HtmlReportWriter : IReportWriter
         sb.AppendLine("<head>");
         sb.AppendLine(" <meta charset=\"UTF-8\">");
         sb.AppendLine(" <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-        sb.AppendLine($" <title>{WebUtility.HtmlEncode(title)}</title>");
+        sb.AppendLine($" <title>{HtmlEncode(title)}</title>");
         sb.AppendLine(" <style>");
         sb.AppendLine(" body { font-family: Arial, Helvetica, sans-serif; margin: 20px; }");
         sb.AppendLine(" h1 { color: #2c3e50; }");
@@ -71,7 +72,7 @@ public sealed class HtmlReportWriter : IReportWriter
         sb.AppendLine(" </style>");
         sb.AppendLine("</head>");
         sb.AppendLine("<body>");
-        sb.AppendLine($" <h1>{WebUtility.HtmlEncode(title)}</h1>");
+        sb.AppendLine($" <h1>{HtmlEncode(title)}</h1>");
 
         // Severity summary badges
         sb.AppendLine(" <div class=\"severity-summary\">");
@@ -84,15 +85,15 @@ public sealed class HtmlReportWriter : IReportWriter
         var infoCount = findings.Count(f => string.Equals(f.Severity, "Info", StringComparison.OrdinalIgnoreCase));
 
         if (criticalCount > 0)
-            sb.AppendLine($" <span class=\"severity-badge severity-critical\">Critical: {criticalCount}</span>");
+            sb.AppendLine($" <span class=\"severity-badge severity-critical\">Critical: {HtmlEncode(criticalCount)}</span>");
         if (highCount > 0)
-            sb.AppendLine($" <span class=\"severity-badge severity-high\">High: {highCount}</span>");
+            sb.AppendLine($" <span class=\"severity-badge severity-high\">High: {HtmlEncode(highCount)}</span>");
         if (mediumCount > 0)
-            sb.AppendLine($" <span class=\"severity-badge severity-medium\">Medium: {mediumCount}</span>");
+            sb.AppendLine($" <span class=\"severity-badge severity-medium\">Medium: {HtmlEncode(mediumCount)}</span>");
         if (lowCount > 0)
-            sb.AppendLine($" <span class=\"severity-badge severity-low\">Low: {lowCount}</span>");
+            sb.AppendLine($" <span class=\"severity-badge severity-low\">Low: {HtmlEncode(lowCount)}</span>");
         if (infoCount > 0)
-            sb.AppendLine($" <span class=\"severity-badge severity-info\">Info: {infoCount}</span>");
+            sb.AppendLine($" <span class=\"severity-badge severity-info\">Info: {HtmlEncode(infoCount)}</span>");
 
         sb.AppendLine(" </div>");
 
@@ -119,8 +120,8 @@ public sealed class HtmlReportWriter : IReportWriter
         foreach (var group in summary)
         {
             sb.AppendLine(" <tr>");
-            sb.AppendLine($" <td>{WebUtility.HtmlEncode(group.Key)}</td>");
-            sb.AppendLine($" <td>{group.Count()}</td>");
+            sb.AppendLine($" <td>{HtmlEncode(group.Key)}</td>");
+            sb.AppendLine($" <td>{HtmlEncode(group.Count())}</td>");
             sb.AppendLine(" </tr>");
         }
 
@@ -145,13 +146,13 @@ public sealed class HtmlReportWriter : IReportWriter
         foreach (var f in findings)
         {
             var severityClass = GetSeverityClass(f.Severity);
-            sb.AppendLine($" <tr class=\"severity-row\" data-severity=\"{WebUtility.HtmlEncode(severityClass)}\">");
-            sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.FilePath)}</td>");
-            sb.AppendLine($" <td>{f.LineNumber}</td>");
-            sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Rule)}</td>");
-            sb.AppendLine($" <td><span class=\"severity-badge {WebUtility.HtmlEncode(severityClass)}\">{WebUtility.HtmlEncode(f.Severity)}</span></td>");
-            sb.AppendLine($" <td>{WebUtility.HtmlEncode(MaskSecret(f.Secret))}</td>");
-            sb.AppendLine($" <td>{WebUtility.HtmlEncode(f.Verified ?? "Not checked")}</td>");
+            sb.AppendLine($" <tr class=\"severity-row\" data-severity=\"{HtmlEncode(severityClass)}\">");
+            sb.AppendLine($" <td>{HtmlEncode(f.FilePath)}</td>");
+            sb.AppendLine($" <td>{HtmlEncode(f.LineNumber)}</td>");
+            sb.AppendLine($" <td>{HtmlEncode(f.Rule)}</td>");
+            sb.AppendLine($" <td><span class=\"severity-badge {HtmlEncode(severityClass)}\">{HtmlEncode(f.Severity)}</span></td>");
+            sb.AppendLine($" <td>{HtmlEncode(MaskSecret(f.Secret))}</td>");
+            sb.AppendLine($" <td>{HtmlEncode(f.Verified ?? "Not checked")}</td>");
             sb.AppendLine(" </tr>");
         }
 
@@ -187,9 +188,12 @@ public sealed class HtmlReportWriter : IReportWriter
     /// </summary>
     /// <param name="findings">The secret findings to include in the report.</param>
     /// <param name="path">The file system path where the HTML file will be saved.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="findings"/> or <paramref name="path"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="path"/> is empty or consists only of white-space characters.</exception>
     public void WriteToFile(IReadOnlyList<SecretFinding> findings, string path)
     {
-        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(findings);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         var html = Generate(findings);
         File.WriteAllText(path, html, Encoding.UTF8);
@@ -200,10 +204,10 @@ public sealed class HtmlReportWriter : IReportWriter
     /// </summary>
     /// <param name="secret">The secret string to mask.</param>
     /// <returns>The masked secret.</returns>
-    public static string MaskSecret(string secret)
+    public static string MaskSecret(string? secret)
     {
-        if (secret is null)
-            throw new ArgumentNullException(nameof(secret));
+        if (string.IsNullOrEmpty(secret))
+            return string.Empty;
 
         if (secret.Length <= 4)
             return secret;
@@ -218,7 +222,7 @@ public sealed class HtmlReportWriter : IReportWriter
     /// </summary>
     /// <param name="severity">The severity level.</param>
     /// <returns>The CSS class name.</returns>
-    private static string GetSeverityClass(string severity)
+    private static string GetSeverityClass(string? severity)
     {
         if (string.IsNullOrEmpty(severity))
             return string.Empty;
@@ -234,5 +238,11 @@ public sealed class HtmlReportWriter : IReportWriter
             "info" => "severity-info",
             _ => "severity-medium"
         };
+    }
+
+    private static string HtmlEncode(object? value)
+    {
+        var text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+        return WebUtility.HtmlEncode(text);
     }
 }
