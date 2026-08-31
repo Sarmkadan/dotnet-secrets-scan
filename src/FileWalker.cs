@@ -13,7 +13,7 @@ public sealed class FileWalker
 {
     private const int BinarySniffLength = 8192;
 
-    private static readonly HashSet<string> DirectoryExclusions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> DefaultDirectoryExclusions = new(StringComparer.OrdinalIgnoreCase)
     {
         "bin",
         "obj",
@@ -39,6 +39,7 @@ public sealed class FileWalker
     public const long DefaultMaxFileSizeBytes = 1024 * 1024;
 
     private readonly HashSet<string> _excludePatterns;
+    private readonly HashSet<string> _excludedDirectories;
     private readonly long _maxFileSizeBytes;
 
     /// <summary>
@@ -59,9 +60,17 @@ public sealed class FileWalker
     /// Optional maximum file size (in bytes) to process. Files larger than this value will be skipped.
     /// Defaults to <see cref="DefaultMaxFileSizeBytes"/> (1 MB).
     /// </param>
-    public FileWalker(IEnumerable<string>? excludeGlobs = null, long maxFileSizeBytes = DefaultMaxFileSizeBytes)
+    /// <param name="excludedDirectories">
+    /// Optional additional directory names to exclude. Names are matched against individual directory
+    /// segments, case-insensitively, in addition to the default exclusions.
+    /// </param>
+    public FileWalker(
+        IEnumerable<string>? excludeGlobs = null,
+        long maxFileSizeBytes = DefaultMaxFileSizeBytes,
+        IEnumerable<string>? excludedDirectories = null)
     {
-        _excludePatterns = new HashSet<string>(DirectoryExclusions, StringComparer.OrdinalIgnoreCase);
+        _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _excludedDirectories = new HashSet<string>(DefaultDirectoryExclusions, StringComparer.OrdinalIgnoreCase);
 
         if (excludeGlobs != null)
         {
@@ -70,6 +79,17 @@ public sealed class FileWalker
                 if (!string.IsNullOrWhiteSpace(pattern))
                 {
                     _excludePatterns.Add(pattern.TrimEnd('/', '\\'));
+                }
+            }
+        }
+
+        if (excludedDirectories != null)
+        {
+            foreach (var directoryName in excludedDirectories)
+            {
+                if (!string.IsNullOrWhiteSpace(directoryName))
+                {
+                    _excludedDirectories.Add(directoryName.Trim().TrimEnd('/', '\\'));
                 }
             }
         }
@@ -146,11 +166,15 @@ public sealed class FileWalker
             var isExcluded = false;
             var currentPath = string.Empty;
 
-            foreach (var segment in pathSegments)
+            for (var segmentIndex = 0; segmentIndex < pathSegments.Length; segmentIndex++)
             {
+                var segment = pathSegments[segmentIndex];
                 currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}/{segment}";
 
-                if (_excludePatterns.Contains(segment) || _excludePatterns.Contains(currentPath))
+                var isDirectorySegment = segmentIndex < pathSegments.Length - 1;
+                if ((isDirectorySegment && _excludedDirectories.Contains(segment))
+                    || _excludePatterns.Contains(segment)
+                    || _excludePatterns.Contains(currentPath))
                 {
                     isExcluded = true;
                     break;
