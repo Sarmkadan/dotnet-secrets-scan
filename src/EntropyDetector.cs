@@ -25,6 +25,12 @@ public sealed record EntropyDetectionSettings(
     string[] ContextKeywords = null!)
 {
     /// <summary>
+    /// Gets the keywords that indicate a secret assignment context.
+    /// </summary>
+    public string[] ContextKeywords { get; init; } = ContextKeywords ??
+        ["key", "token", "secret", "password", "pwd", "api", "access", "credential"];
+
+    /// <summary>
     /// Default settings optimized for reducing false positives while maintaining good detection.
     /// </summary>
     public static readonly EntropyDetectionSettings Default = new();
@@ -65,15 +71,10 @@ public static class EntropyDetector
     /// </summary>
     /// <param name="s">The input string.</param>
     /// <returns>The entropy value in bits.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="s"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="s"/> is null or empty.</exception>
     public static double ShannonEntropy(string s)
     {
         ArgumentException.ThrowIfNullOrEmpty(s);
-
-        if (string.IsNullOrEmpty(s))
-        {
-            return 0.0;
-        }
 
         return ShannonEntropy(s.AsSpan());
     }
