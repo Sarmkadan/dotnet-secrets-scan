@@ -75,7 +75,6 @@ public static class EntropyDetector
     public static double ShannonEntropy(string s)
     {
         ArgumentException.ThrowIfNullOrEmpty(s);
-
         return ShannonEntropy(s.AsSpan());
     }
 
@@ -91,27 +90,22 @@ public static class EntropyDetector
             return 0.0;
         }
 
-        // Count frequency of each character
-        var frequency = new Dictionary<char, int>();
+        int length = span.Length;
+        Span<int> frequency = stackalloc int[256];
+
         foreach (char c in span)
         {
-            if (frequency.TryGetValue(c, out int count))
-            {
-                frequency[c] = count + 1;
-            }
-            else
-            {
-                frequency[c] = 1;
-            }
+            frequency[(byte)c]++;
         }
 
         double entropy = 0.0;
-        int length = span.Length;
-
-        foreach (var pair in frequency)
+        foreach (int count in frequency)
         {
-            double probability = (double)pair.Value / length;
-            entropy -= probability * Math.Log(probability, 2);
+            if (count > 0)
+            {
+                double probability = (double)count / length;
+                entropy -= probability * Math.Log2(probability);
+            }
         }
 
         return entropy;
@@ -230,20 +224,17 @@ public static class EntropyDetector
     /// <returns>True if assignment context keywords are found near the secret.</returns>
     private static bool HasAssignmentContext(string line, string secret, EntropyDetectionSettings settings)
     {
-        // Find the position of the secret in the line
         int secretIndex = line.IndexOf(secret, StringComparison.Ordinal);
         if (secretIndex == -1)
         {
-            // Secret might be split across multiple lines or escaped, search entire line
             secretIndex = 0;
         }
 
-        // Search within context window before and after the secret
+        ReadOnlySpan<char> lineSpan = line.AsSpan();
         int start = Math.Max(0, secretIndex - settings.ContextWindow);
-        int end = Math.Min(line.Length, secretIndex + secret.Length + settings.ContextWindow);
-        string context = line[start..end];
+        int end = Math.Min(lineSpan.Length, secretIndex + secret.Length + settings.ContextWindow);
+        ReadOnlySpan<char> context = lineSpan.Slice(start, end - start);
 
-        // Check for assignment context keywords
         foreach (string keyword in settings.ContextKeywords)
         {
             if (context.Contains(keyword, StringComparison.OrdinalIgnoreCase))
