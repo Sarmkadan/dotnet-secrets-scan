@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace DotnetSecretsScan;
 
@@ -112,17 +113,19 @@ public static class EntropyDetector
     }
 
     /// <summary>
-    /// Scans file lines for potential secrets based based on entropy threshold.
+    /// Scans file lines for potential secrets based on entropy threshold.
     /// </summary>
     /// <param name="filePath">Path to the file being scanned.</param>
     /// <param name="lines">File content lines.</param>
     /// <param name="settings">Detection settings. Uses <see cref="EntropyDetectionSettings.Default"/> if null.</param>
+    /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
     /// <returns>Collection of secret findings.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
     public static IEnumerable<SecretFinding> Scan(
         string filePath,
         string[] lines,
-        EntropyDetectionSettings? settings = null)
+        EntropyDetectionSettings? settings = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(filePath);
         ArgumentNullException.ThrowIfNull(lines);
@@ -136,6 +139,8 @@ public static class EntropyDetector
 
         for (int i = 0; i < lines.Length; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string line = lines[i];
 
             // Skip empty lines
