@@ -10,6 +10,27 @@ namespace DotnetSecretsScan;
 /// <summary>
 /// Writes scan results in SARIF 2.1.0 format for CI integration.
 /// </summary>
+/// <remarks>
+/// This writer maps <see cref="SecretFinding"/> objects to SARIF 2.1.0 results.
+/// <para>
+/// The SARIF structure produced includes:
+/// <list type="bullet">
+/// <item><description><c>runs</c>: An array containing a single run object.</description></item>
+/// <item><description><c>tool.driver.rules</c>: Currently an empty array, as rule metadata is not fully mapped in this version.</description></item>
+/// <item><description><c>results</c>: An array of result objects, one per finding. Each result includes:</description></item>
+/// <item><description><c>locations</c>: Physical location details including <c>artifactLocation</c> (file path) and <c>region</c> (line/column).</description></item>
+/// <item><description><c>partialFingerprints</c>: Not currently populated in this implementation.</description></item>
+/// </list>
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var writer = new SarifReportWriter();
+/// using var fileStream = new FileStream("report.sarif", FileMode.Create);
+/// using var textWriter = new StreamWriter(fileStream);
+/// writer.Write(scanResult, textWriter);
+/// </code>
+/// </example>
 public sealed class SarifReportWriter : IReportWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
