@@ -164,9 +164,9 @@ public static class Program
 
             // Create scanner with built-in rules
             var rules = BuiltInRules.All.Concat(CloudProviderRules.All).ToList();
-            ILogger<SolutionScanner>? scannerLogger = verbose ?
-                LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug)).CreateLogger<SolutionScanner>() :
-                null;
+            ILoggerFactory? loggerFactory = verbose ? LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug)) : null;
+            ILogger<SolutionScanner>? scannerLogger = loggerFactory?.CreateLogger<SolutionScanner>();
+            ILogger<FileWalker>? fileWalkerLogger = loggerFactory?.CreateLogger<FileWalker>();
             var scanner = new SolutionScanner(rules, scannerLogger);
             Log(verbose, $"event=scan_start root={path} ruleCount={rules.Count}");
 
@@ -174,7 +174,7 @@ public static class Program
             if (verbose && path != "-" && Directory.Exists(path))
             {
                 var discoveryStopwatch = Stopwatch.StartNew();
-                var diagnosticFileWalker = new FileWalker();
+                var diagnosticFileWalker = new FileWalker(fileWalkerLogger);
                 _ = diagnosticFileWalker.EnumerateFiles(path).Count();
                 discoveryStopwatch.Stop();
                 filesSkipped = diagnosticFileWalker.SkippedFileCount
