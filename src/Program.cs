@@ -6,6 +6,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using DotnetSecretsScan.Verification;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 namespace DotnetSecretsScan;
 
@@ -162,10 +164,13 @@ public static class Program
 
             // Create scanner with built-in rules
             var rules = BuiltInRules.All.Concat(CloudProviderRules.All).ToList();
-            var scanner = new SolutionScanner(rules);
+            ILogger<SolutionScanner>? scannerLogger = verbose ?
+                LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug)).CreateLogger<SolutionScanner>() :
+                null;
+            var scanner = new SolutionScanner(rules, scannerLogger);
             Log(verbose, $"event=scan_start root={path} ruleCount={rules.Count}");
 
-            var filesSkipped = 0;
+            var filesSkipped = 0L;
             if (verbose && path != "-" && Directory.Exists(path))
             {
                 var discoveryStopwatch = Stopwatch.StartNew();
