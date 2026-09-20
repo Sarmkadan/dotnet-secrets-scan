@@ -11,12 +11,36 @@ namespace DotnetSecretsScan;
 /// Configuration settings for entropy-based secret detection.
 /// Allows teams to tune detection thresholds based on their specific needs.
 /// </summary>
-/// <param name="Threshold">Minimum entropy threshold to consider as a potential secret.</param>
-/// <param name="MinLength">Minimum length of string to consider for entropy analysis.</param>
-/// <param name="ContextWindow">Number of characters to search around a match for assignment context keywords.</param>
-/// <param name="HexEntropyThreshold">Higher entropy threshold for pure hex strings (GUIDs, hashes).</param>
-/// <param name="Base64EntropyThreshold">Higher entropy threshold for Base64 strings.</param>
-/// <param name="ContextKeywords">Keywords that indicate a secret assignment context.</param>
+/// <param name="Threshold">
+/// Minimum Shannon entropy threshold (in bits per character) to consider a string a potential secret.
+/// Default is 4.5. This value was chosen to balance detection sensitivity with false positive reduction.
+/// Typical English text has an entropy of ~4.0-4.5 bits, while random strings or encoded secrets often exceed 4.5.
+/// </param>
+/// <param name="MinLength">
+/// Minimum length of a string to consider for entropy analysis. Short strings are excluded to avoid noise.
+/// Default is 20 characters.
+/// </param>
+/// <param name="ContextWindow">
+/// Number of characters to search around a match for assignment context keywords.
+/// Default is 50 characters.
+/// </param>
+/// <param name="HexEntropyThreshold">
+/// Higher entropy threshold specifically for pure hexadecimal strings (e.g., GUIDs, hashes).
+/// Default is 5.0. Hexadecimal characters have a maximum theoretical entropy of 4.0 bits (log2(16)).
+/// A threshold above 4.0 effectively filters out most hex strings, as they rarely reach higher entropy
+/// unless they contain unusual patterns or are misidentified. This helps reduce false positives from
+/// identifiers like commit SHAs or UUIDs.
+/// </param>
+/// <param name="Base64EntropyThreshold">
+/// Entropy threshold for Base64-encoded strings.
+/// Default is 4.0. Base64 uses a 64-character alphabet (log2(64) = 6 bits max entropy).
+/// A threshold of 4.0 is chosen because Base64 strings often have lower entropy than raw random strings
+/// due to their structured encoding, but still indicate secrets when they exceed typical readable text.
+/// </param>
+/// <param name="ContextKeywords">
+/// Keywords that indicate a secret assignment context (e.g., variable names, config keys).
+/// Used to elevate the severity of findings.
+/// </param>
 public sealed record EntropyDetectionSettings(
     double Threshold = 4.5,
     int MinLength = 20,
@@ -65,14 +89,44 @@ public sealed record EntropyDetectionSettings(
     }
 }
 
+/// <summary>
+/// Provides entropy-based detection for potential secrets in source code.
+/// Uses Shannon entropy to measure the randomness of string literals. Higher entropy values
+/// generally indicate less predictable, more random strings, which are characteristic of secrets,
+/// API keys, and tokens.
+///
+/// The detector assumes ASCII-compatible character sets for frequency analysis. It applies different
+/// thresholds based on character set analysis: hexadecimal strings are held to a higher standard due
+/// to their lower maximum entropy, while Base64 strings use a tailored threshold to account for
+/// their structured encoding. Known non-secret patterns (GUIDs, hashes, paths) are filtered out
+/// before entropy calculation to reduce false positives.
+/// </summary>
 public static class EntropyDetector
 {
     /// <summary>
     /// Calculates the Shannon entropy of a string.
+    /// Shannon entropy measures the average amount of information or randomness per character in a string.
+    /// It is calculated as H = -Σ p(x) * log2(p(x)), where p(x) is the probability of character x.
+    /// The result is expressed in bits per character.
     /// </summary>
     /// <param name="s">The input string.</param>
-    /// <returns>The entropy value in bits.</returns>
+    /// <returns>
+    /// The entropy value in bits per character. A value of 0 indicates a string with identical characters.
+    /// Higher values indicate greater randomness. Typical English text ranges from 3.5 to 4.5 bits,
+    /// while random secrets often exceed 4.5 bits.
+    /// </returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="s"/> is null or empty.</exception>
+    /// <example>
+    /// <code>
+    /// // High-entropy string (likely a secret)
+    /// double highEntropy = EntropyDetector.ShannonEntropy("a1B2c3D4e5F6g7H8i9J0kLmN");
+    /// // Returns approximately 4.7 bits
+    ///
+    /// // Low-entropy string (likely not a secret)
+    /// double lowEntropy = EntropyDetector.ShannonEntropy("aaaaaaaaaaaaaaaaaaaa");
+    /// // Returns 0.0 bits
+    /// </code>
+    /// </example>
     public static double ShannonEntropy(string s)
     {
         ArgumentException.ThrowIfNullOrEmpty(s);
@@ -83,7 +137,10 @@ public static class EntropyDetector
     /// Calculates the Shannon entropy of a character span.
     /// </summary>
     /// <param name="span">The input character span.</param>
-    /// <returns>The entropy value in bits.</returns>
+    /// <returns>
+    /// The entropy value in bits per character. See <see cref="ShannonEntropy(string)"/> for details on
+    /// interpretation and expected ranges.
+    /// </returns>
     public static double ShannonEntropy(ReadOnlySpan<char> span)
     {
         if (span.IsEmpty)
@@ -114,13 +171,21 @@ public static class EntropyDetector
 
     /// <summary>
     /// Scans file lines for potential secrets based on entropy threshold.
+    /// Extracts string literals, filters out known non-secret patterns (GUIDs, hashes, etc.),
+    /// and evaluates entropy against configured thresholds. Context keywords are checked to
+    /// adjust severity.
     /// </summary>
     /// <param name="filePath">Path to the file being scanned.</param>
     /// <param name="lines">File content lines.</param>
     /// <param name="settings">Detection settings. Uses <see cref="EntropyDetectionSettings.Default"/> if null.</param>
     /// <param name="cancellationToken">Token to monitor for cancellation requests.</param>
-    /// <returns>Collection of secret findings.</returns>
+    /// <returns>
+    /// An <see cref="IEnumerable{T}"/> of <see cref="SecretFinding"/> objects representing potential secrets.
+    /// Each finding includes the file path, line number, matched secret, calculated entropy context,
+    /// and severity level ("High" if assignment context keywords are found, otherwise "Low").
+    /// </returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="lines"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="filePath"/> is null or empty.</exception>
     public static IEnumerable<SecretFinding> Scan(
         string filePath,
         string[] lines,
