@@ -5,22 +5,30 @@ using System.Text.RegularExpressions;
 namespace DotnetSecretsScan;
 
 /// <summary>
-/// Severity level of a detected secret.
+/// Represents the severity level of a detected secret.
 /// </summary>
+/// <remarks>
+/// <list type="table">
+///     <listheader><term>Level</term><description>Description</description></listheader>
+///     <item><term>Low</term><td>Informational only. Likely a false positive or low-risk pattern.</td></item>
+///     <item><term>Medium</term><td>Potential issue. May require manual verification.</td></item>
+///     <item><term>High</term><td>Confirmed secret that should be rotated immediately.</td></item>
+/// </list>
+/// </remarks>
 public enum SecretSeverity
 {
     /// <summary>
-    /// Low severity - informational only
+    /// Low severity - informational only.
     /// </summary>
     Low,
 
     /// <summary>
-    /// Medium severity - potential issue
+    /// Medium severity - potential issue.
     /// </summary>
     Medium,
 
     /// <summary>
-    /// High severity - confirmed secret that should be rotated
+    /// High severity - confirmed secret that should be rotated.
     /// </summary>
     High
 }
@@ -28,6 +36,18 @@ public enum SecretSeverity
 /// <summary>
 /// Represents a secret detection rule.
 /// </summary>
+/// <remarks>
+/// Rules are immutable and compiled with a 2-second timeout to prevent ReDoS attacks.
+/// <para>
+/// Common false-positive caveats:
+/// <list type="bullet">
+///     <item><description>Connection strings and generic API keys often match in sample code, documentation, or placeholder values. Verify context before rotating.</description></item>
+///     <item><description>PEM/SSH private key headers may appear in certificate bundles or public key files. Check the full header for 'PRIVATE' or 'ENCRYPTED'.</description></item>
+///     <item><description>JWTs and Bearer tokens are frequently used in logs or examples. Ensure they are not expired or test tokens.</description></item>
+///     <item><description>Generic patterns (SS009-SS011) rely on length and context keywords. They have higher false-positive rates and should be tuned or suppressed if noisy.</description></item>
+/// </list>
+/// </para>
+/// </remarks>
 public class SecretRule
 {
     private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
@@ -43,13 +63,16 @@ public class SecretRule
     public string Name { get; }
 
     /// <summary>
-    /// Gets the regex pattern to match secrets.
+    /// Gets the regex pattern used to match secrets.
     /// </summary>
     public string Pattern { get; }
 
     /// <summary>
     /// Gets the compiled regular expression used to match secrets.
     /// </summary>
+    /// <remarks>
+    /// Compiled with <see cref="RegexOptions.Compiled"/> and a 2-second timeout to mitigate ReDoS risks.
+    /// </remarks>
     public Regex Regex { get; }
 
     /// <summary>
@@ -65,11 +88,22 @@ public class SecretRule
     /// <summary>
     /// Initializes a new instance of the <see cref="SecretRule"/> class.
     /// </summary>
-    /// <param name="id">The rule identifier.</param>
-    /// <param name="name">The human-readable name.</param>
-    /// <param name="pattern">The regex pattern.</param>
-    /// <param name="description">The description.</param>
-    /// <param name="severity">The severity level.</param>
+    /// <param name="id">The unique rule identifier (e.g., SS001).</param>
+    /// <param name="name">The human-readable name of the rule.</param>
+    /// <param name="pattern">The regular expression pattern to match secrets.</param>
+    /// <param name="description">A human-readable description of the pattern.</param>
+    /// <param name="severity">The severity level assigned to matches.</param>
+    /// <example>
+    /// <code>
+    /// var rule = new SecretRule(
+    ///     id: "SS001",
+    ///     name: "AWS Access Key ID",
+    ///     pattern: @"AKIA[0-9A-Z]{16}",
+    ///     description: "AWS Access Key ID",
+    ///     severity: SecretSeverity.High
+    /// );
+    /// </code>
+    /// </example>
     public SecretRule(string id, string name, string pattern, string description, SecretSeverity severity)
     {
         Id = id;
@@ -82,13 +116,34 @@ public class SecretRule
 }
 
 /// <summary>
-/// Built-in secret detection rules for common secret patterns.
+/// Provides a collection of built-in secret detection rules for common cloud providers, tokens, and credentials.
 /// </summary>
+/// <remarks>
+/// <para>This collection includes rules for:</para>
+/// <list type="bullet">
+///     <item><description>AWS Access Keys and Secret Keys (SS001, SS002)</description></item>
+///     <item><description>Private Keys in PEM/SSH formats (SS003)</description></item>
+///     <item><description>Database Connection Strings with passwords (SS004)</description></item>
+///     <item><description>Bearer Tokens and JWTs (SS005, JWT001)</description></item>
+///     <item><description>GitHub PATs, OAuth Tokens, and Fine-Grained PATs (SS006, SS007, SS019)</description></item>
+///     <item><description>Slack Tokens (SS008)</description></item>
+///     <item><description>Generic API Keys, Secrets, and Private Keys (SS009, SS010, SS011)</description></item>
+///     <item><description>Telegram Bot Tokens (SS012)</description></item>
+///     <item><description>Stripe Live Keys (SS013, SS014)</description></item>
+///     <item><description>Google API Keys (SS015)</description></item>
+///     <item><description>Basic Auth Credentials (SS016)</description></item>
+///     <item><description>NPM and NuGet API Keys (SS017, SS018)</description></item>
+/// </list>
+/// <para>
+/// <b>False-Positive Caveats:</b> Generic patterns (SS009-SS011) and connection strings frequently match in documentation, sample code, or environment variable templates. Always verify matches in context before taking action.
+/// </para>
+/// </remarks>
 public static class BuiltInRules
 {
     /// <summary>
-    /// Gets all built-in secret detection rules.
+    /// Gets the complete list of built-in secret detection rules.
     /// </summary>
+    /// <value>An immutable list of <see cref="SecretRule"/> instances.</value>
     public static IReadOnlyList<SecretRule> All = new List<SecretRule>
     {
         // AWS Access Keys
@@ -272,6 +327,15 @@ public static class BuiltInRules
         )
     };
 
+    /// <summary>
+    /// Creates a new <see cref="SecretRule"/> instance.
+    /// </summary>
+    /// <param name="id">The rule identifier.</param>
+    /// <param name="name">The human-readable name.</param>
+    /// <param name="pattern">The regex pattern.</param>
+    /// <param name="description">The description.</param>
+    /// <param name="severity">The severity level.</param>
+    /// <returns>A configured <see cref="SecretRule"/> instance.</returns>
     private static SecretRule CreateRule(
         string id,
         string name,
