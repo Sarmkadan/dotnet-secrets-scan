@@ -6,6 +6,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DotnetSecretsScan;
 
@@ -31,15 +33,18 @@ public sealed class SolutionScanner
     /// The collection of secret detection rules to apply during scanning.
     /// </summary>
     private readonly IEnumerable<SecretRule> _rules;
+    private readonly ILogger<SolutionScanner> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SolutionScanner"/> class.
     /// </summary>
     /// <param name="rules">The collection of secret detection rules to use for scanning.</param>
+    /// <param name="logger">Optional logger for structured logging. Defaults to NullLogger.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="rules"/> is null.</exception>
-    public SolutionScanner(IEnumerable<SecretRule> rules)
+    public SolutionScanner(IEnumerable<SecretRule> rules, ILogger<SolutionScanner>? logger = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        _logger = logger ?? NullLogger<SolutionScanner>.Instance;
     }
 
     /// <summary>
@@ -90,7 +95,7 @@ public sealed class SolutionScanner
 
         try
         {
-            var fileWalker = new FileWalker();
+            var fileWalker = new FileWalker(logger: null);
             var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions
@@ -204,7 +209,7 @@ public sealed class SolutionScanner
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var fileWalker = new FileWalker();
+            var fileWalker = new FileWalker(logger: null);
             var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions

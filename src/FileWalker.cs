@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DotnetSecretsScan;
 
@@ -41,20 +43,24 @@ public sealed class FileWalker
     private readonly HashSet<string> _excludePatterns;
     private readonly HashSet<string> _excludedDirectories;
     private readonly long _maxFileSizeBytes;
+    private readonly ILogger<FileWalker> _logger;
+    private long _totalFilesScanned;
+    private long _totalBytesScanned;
 
     /// <summary>
     /// Gets the number of files that were skipped because they exceeded the configured maximum size.
     /// </summary>
-    public int SkippedFileCount { get; private set; }
+    public long SkippedFileCount { get; private set; }
 
     /// <summary>
     /// Gets the number of files that were skipped because they were detected as binary content.
     /// </summary>
-    public int SkippedBinaryFileCount { get; private set; }
+    public long SkippedBinaryFileCount { get; private set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FileWalker"/> class.
     /// </summary>
+    /// <param name="logger">Optional logger for structured logging. Defaults to NullLogger.</param>
     /// <param name="excludeGlobs">Optional additional glob patterns to exclude from enumeration.</param>
     /// <param name="maxFileSizeBytes">
     /// Optional maximum file size (in bytes) to process. Files larger than this value will be skipped.
@@ -65,10 +71,12 @@ public sealed class FileWalker
     /// segments, case-insensitively, in addition to the default exclusions.
     /// </param>
     public FileWalker(
+        ILogger<FileWalker>? logger = null,
         IEnumerable<string>? excludeGlobs = null,
         long maxFileSizeBytes = DefaultMaxFileSizeBytes,
         IEnumerable<string>? excludedDirectories = null)
     {
+        _logger = logger ?? NullLogger<FileWalker>.Instance;
         _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _excludedDirectories = new HashSet<string>(DefaultDirectoryExclusions, StringComparer.OrdinalIgnoreCase);
 
@@ -95,6 +103,10 @@ public sealed class FileWalker
         }
 
         _maxFileSizeBytes = maxFileSizeBytes;
+
+        // Reset counters for fresh instance
+        SkippedFileCount = 0;
+        SkippedBinaryFileCount = 0;
     }
 
     /// <summary>
@@ -105,7 +117,6 @@ public sealed class FileWalker
     /// <returns>Collection of file paths matching allowed extensions.</returns>
     /// <exception cref="ArgumentNullException">Thrown when rootPath is null.</exception>
     /// <exception cref="DirectoryNotFoundException">Thrown when rootPath does not exist.</exception>
-    /// <exception cref="OperationCanceledException">Thrown when the operation is cancelled.</exception>
     public IEnumerable<string> EnumerateFiles(string rootPath, CancellationToken cancellationToken = default)
     {
         if (rootPath == null)
@@ -120,29 +131,41 @@ public sealed class FileWalker
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Reset the skipped file counters for each new enumeration run.
+        // Reset counters for each new enumeration run
         SkippedFileCount = 0;
         SkippedBinaryFileCount = 0;
+        _totalFilesScanned = 0;
+        _totalBytesScanned = 0;
 
         var searchOption = SearchOption.AllDirectories;
         var dirInfo = new DirectoryInfo(rootPath);
 
-        return EnumerateFilesInternal(dirInfo, searchOption, cancellationToken);
+        return EnumerateAndLog(EnumerateFilesInternal(dirInfo, searchOption, cancellationToken));
     }
 
     private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo directory, SearchOption searchOption, CancellationToken cancellationToken)
     {
-        // EnumerateFiles is lazy: exceptions surface during iteration, not at the call site,
-        // so a try/catch around the call alone would not protect the foreach below. Use
-        // EnumerationOptions to skip inaccessible entries instead of aborting the whole scan.
+        // Log entering this directory at Debug level
+        _logger.LogDebug("Entering directory: {Path}", directory.FullName);
+
         var options = new EnumerationOptions
         {
             IgnoreInaccessible = true,
-            RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
+            RecurseSubdirectories = false, // We handle recursion manually
             AttributesToSkip = FileAttributes.ReparsePoint
         };
 
-        IEnumerable<FileInfo> files = directory.EnumerateFiles("*", options);
+        // Enumerate files in current directory
+        IEnumerable<FileInfo> files;
+        try
+        {
+            files = directory.EnumerateFiles("*", options);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthorized access to directory: {Path}", directory.FullName);
+            yield break;
+        }
 
         foreach (var file in files)
         {
@@ -152,6 +175,7 @@ public sealed class FileWalker
             if (file.Length > _maxFileSizeBytes)
             {
                 SkippedFileCount++;
+                _logger.LogWarning("Skipping file due to size: {Path} (size: {SizeBytes} bytes)", file.FullName, file.Length);
                 continue;
             }
 
@@ -183,23 +207,66 @@ public sealed class FileWalker
 
             if (isExcluded)
             {
+                _logger.LogDebug("Skipping file due to exclusion: {Path}", file.FullName);
                 continue;
             }
 
             var extension = file.Extension.ToLowerInvariant();
-        if (extension is not (".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env") || BinaryExtensions.Contains(extension))
+            if (extension is not (".cs" or ".json" or ".config" or ".xml" or ".yml" or ".yaml" or ".env") || BinaryExtensions.Contains(extension))
             {
+                _logger.LogDebug("Skipping file due to extension: {Path}", file.FullName);
                 continue;
             }
 
             if (IsLikelyBinary(file.FullName))
             {
                 SkippedBinaryFileCount++;
+                _logger.LogWarning("Skipping file due to binary content: {Path}", file.FullName);
                 continue;
             }
 
+            // Yield the file and log at Debug level
+            _logger.LogDebug("Yielding file: {Path}", file.FullName);
+            _totalFilesScanned++;
+            _totalBytesScanned += file.Length;
+
             yield return file.FullName;
         }
+
+        // Recurse into subdirectories if requested
+        if (searchOption == SearchOption.AllDirectories)
+        {
+            IEnumerable<DirectoryInfo> subDirectories;
+            try
+            {
+                subDirectories = directory.EnumerateDirectories("*", options);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Unauthorized access to directory: {Path}", directory.FullName);
+                yield break;
+            }
+
+            foreach (var subDir in subDirectories)
+            {
+                foreach (var file in EnumerateFilesInternal(subDir, searchOption, cancellationToken))
+                {
+                    yield return file;
+                }
+            }
+        }
+    }
+
+    private IEnumerable<string> EnumerateAndLog(IEnumerable<string> source)
+    {
+        foreach (var item in source)
+        {
+            yield return item;
+        }
+
+        // Log final totals at Information level
+        _logger.LogInformation("Scan completed: {FilesScanned} files scanned, {BytesScanned} bytes read, {FilesSkipped} files skipped",
+            _totalFilesScanned, _totalBytesScanned, SkippedFileCount + SkippedBinaryFileCount);
     }
 
     /// <summary>
