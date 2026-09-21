@@ -325,11 +325,8 @@ public sealed class SecretVerifier : IDisposable
         return null;
     }
 
-    private static Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
-    {
-        var backoff = TimeSpan.FromMilliseconds(BaseBackoff.TotalMilliseconds * Math.Pow(2, attempt));
-        return Task.Delay(backoff, cancellationToken);
-    }
+    private static Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken) =>
+        Task.Delay(TimeSpan.FromMilliseconds(BaseBackoff.TotalMilliseconds * Math.Pow(2, attempt)), cancellationToken);
 
     /// <summary>
     /// Reports whether the circuit breaker for the given provider is currently open, meaning
