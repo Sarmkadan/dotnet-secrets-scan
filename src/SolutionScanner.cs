@@ -320,12 +320,12 @@ public sealed class SolutionScanner
                 }
             }
         }
-        catch (IOException _)
+        catch (IOException)
         {
             // Rethrow to be handled by the caller (Scan/ScanAsync) which increments processingErrors
             throw;
         }
-        catch (UnauthorizedAccessException _)
+        catch (UnauthorizedAccessException)
         {
             throw;
         }
@@ -417,12 +417,12 @@ public sealed class SolutionScanner
                 }
             }
         }
-        catch (IOException ex)
+        catch (IOException _)
         {
             // Rethrow to be handled by the caller (ScanAsync) which increments processingErrors
             throw;
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException _)
         {
             throw;
         }
