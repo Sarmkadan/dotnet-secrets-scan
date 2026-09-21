@@ -98,6 +98,12 @@ public sealed class ConsoleReportWriter : IReportWriter
                     {
                         output.WriteLine($"    Secret: {finding.Secret}");
                     }
+
+                    // Show verification status if available
+                    if (!string.IsNullOrEmpty(finding.Verified))
+                    {
+                        output.WriteLine($"    Verified: {finding.Verified}");
+                    }
                 }
             }
         }
