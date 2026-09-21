@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Text.RegularExpressions;
 
 namespace DotnetSecretsScan;
@@ -27,7 +27,7 @@ public static class CloudProviderRules
     /// <summary>
     /// Gets the immutable collection of all cloud provider detection rules.
     /// </summary>
-    public static IReadOnlyList<SecretRule> All { get; } = new List<SecretRule>
+    public static ImmutableArray<SecretRule> All { get; } = new[]
     {
         // AWS Access Key ID
         CreateRule(
@@ -90,7 +90,7 @@ public static class CloudProviderRules
             @"mongodb(?:\+srv)?://[^:]+:[^@]+@",
             "Detects MongoDB URIs with credentials",
             SecretSeverity.High),
-    };
+    }.ToImmutableArray();
 
     /// <summary>
     /// Creates a new <see cref="SecretRule"/> for detecting a specific secret format.
