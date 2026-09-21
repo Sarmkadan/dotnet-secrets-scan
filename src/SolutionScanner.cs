@@ -284,10 +284,53 @@ public sealed class SolutionScanner
     /// <returns>A list of <see cref="SecretFinding"/> objects representing detected secrets.</returns>
     private List<SecretFinding> ProcessFile(string filePath, out int lineCount)
     {
-        var lines = ReadAllLinesStreaming(filePath);
-        lineCount = lines.Length;
-        var fileContent = string.Join(FileContentLineSeparator, lines);
-        return ProcessContent(fileContent, lines, filePath);
+        var findings = new List<SecretFinding>();
+        lineCount = 0;
+
+        try
+        {
+            using var reader = new StreamReader(filePath);
+            string? line;
+            int currentLineNumber = 0;
+            while ((line = reader.ReadLine()) != null)
+            {
+                currentLineNumber++;
+                lineCount++;
+
+                var tempLines = new[] { line };
+
+                // Apply each rule
+                foreach (var rule in _rules)
+                {
+                    var ruleFindings = rule.Match(line, tempLines);
+                    foreach (var finding in ruleFindings)
+                    {
+                        finding.LineNumber += currentLineNumber - 1;
+                        finding.FilePath = filePath;
+                        findings.Add(finding);
+                    }
+                }
+
+                // Apply entropy detection
+                var entropyFindings = EntropyDetector.Scan(filePath, tempLines);
+                foreach (var finding in entropyFindings)
+                {
+                    finding.LineNumber += currentLineNumber - 1;
+                    findings.Add(finding);
+                }
+            }
+        }
+        catch (IOException _)
+        {
+            // Rethrow to be handled by the caller (Scan/ScanAsync) which increments processingErrors
+            throw;
+        }
+        catch (UnauthorizedAccessException _)
+        {
+            throw;
+        }
+
+        return findings;
     }
 
     /// <summary>
@@ -338,9 +381,53 @@ public sealed class SolutionScanner
     /// </returns>
     private async Task<(List<SecretFinding> Findings, int LineCount)> ProcessFileAsync(string filePath)
     {
-        var lines = await ReadAllLinesStreamingAsync(filePath);
-        var fileContent = string.Join(FileContentLineSeparator, lines);
-        return (ProcessContent(fileContent, lines, filePath), lines.Length);
+        var findings = new List<SecretFinding>();
+        int lineCount = 0;
+
+        try
+        {
+            using var reader = new StreamReader(filePath);
+            string? line;
+            int currentLineNumber = 0;
+            while ((line = await reader.ReadLineAsync()) != null)
+            {
+                currentLineNumber++;
+                lineCount++;
+
+                var tempLines = new[] { line };
+
+                // Apply each rule
+                foreach (var rule in _rules)
+                {
+                    var ruleFindings = rule.Match(line, tempLines);
+                    foreach (var finding in ruleFindings)
+                    {
+                        finding.LineNumber += currentLineNumber - 1;
+                        finding.FilePath = filePath;
+                        findings.Add(finding);
+                    }
+                }
+
+                // Apply entropy detection
+                var entropyFindings = EntropyDetector.Scan(filePath, tempLines);
+                foreach (var finding in entropyFindings)
+                {
+                    finding.LineNumber += currentLineNumber - 1;
+                    findings.Add(finding);
+                }
+            }
+        }
+        catch (IOException ex)
+        {
+            // Rethrow to be handled by the caller (ScanAsync) which increments processingErrors
+            throw;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw;
+        }
+
+        return (findings, lineCount);
     }
 
     /// <summary>
