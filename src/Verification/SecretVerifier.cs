@@ -155,9 +155,11 @@ public sealed class SecretVerifier : IDisposable
             () =>
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, "https://sts.amazonaws.com/");
+                // Use a fixed date far in the past for the credential scope
+                // The signature is intentionally incorrect; we only care about the error response
                 request.Headers.Authorization = new AuthenticationHeaderValue(
                     "AWS4-HMAC-SHA256",
-                    $"Credential={accessKeyId}/00000000/us-east-1/sts/aws4_request, SignedHeaders=host, Signature=0000000000000000000000000000000000000000000000000000000000000000");
+                    $"Credential={accessKeyId}/19700101/us-east-1/sts/aws4_request, SignedHeaders=host, Signature=0000000000000000000000000000000000000000000000000000000000000000");
                 request.Content = new StringContent("Action=GetCallerIdentity&Version=2011-06-15", System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
                 return request;
             },
