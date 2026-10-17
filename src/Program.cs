@@ -24,6 +24,20 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         var rootCommand = CreateRootCommand();
+
+        // System.CommandLine reports parse errors with exit code 1, which collides with "findings".
+        // Report them here instead so that every invalid invocation returns ExitCodes.ScanError.
+        var parseResult = rootCommand.Parse(args);
+        if (parseResult.Errors.Count > 0)
+        {
+            foreach (var error in parseResult.Errors)
+            {
+                Console.Error.WriteLine($"Error: {error.Message}");
+            }
+
+            return ExitCodes.ScanError;
+        }
+
         return await rootCommand.InvokeAsync(args);
     }
 
@@ -85,6 +99,30 @@ public static class Program
             IsRequired = false
         };
 
+        var entropyThresholdOption = new Option<double>(
+            new[] { "--entropy-threshold" },
+            getDefaultValue: () => EntropyDetectionSettings.Default.Threshold,
+            $"Shannon entropy threshold in bits per character, between {ScanOptionsValidator.MinEntropyThreshold} and {ScanOptionsValidator.MaxEntropyThreshold}. Default: {EntropyDetectionSettings.Default.Threshold}")
+        {
+            IsRequired = false
+        };
+
+        var minTokenLengthOption = new Option<int>(
+            new[] { "--min-token-length" },
+            getDefaultValue: () => EntropyDetectionSettings.Default.MinLength,
+            $"Minimum token length considered by entropy detection, at least {ScanOptionsValidator.MinTokenLengthFloor}. Default: {EntropyDetectionSettings.Default.MinLength}")
+        {
+            IsRequired = false
+        };
+
+        var excludeOption = new Option<string[]>(
+            new[] { "--exclude" },
+            "Glob pattern for paths to skip (e.g. '**/*.min.js' or 'tests/fixtures'). Repeat to add more patterns")
+        {
+            IsRequired = false,
+            AllowMultipleArgumentsPerToken = true
+        };
+
         rootCommand.AddArgument(pathArgument);
         rootCommand.AddOption(outputOption);
         rootCommand.AddOption(formatOption);
@@ -92,24 +130,34 @@ public static class Program
         rootCommand.AddOption(baselineOption);
         rootCommand.AddOption(pruneBaselineOption);
         rootCommand.AddOption(verifyOption);
+        rootCommand.AddOption(entropyThresholdOption);
+        rootCommand.AddOption(minTokenLengthOption);
+        rootCommand.AddOption(excludeOption);
 
-        rootCommand.SetHandler(
-            (path, outputPath, format, verbose, baselinePath, pruneBaseline, verify) =>
-                RunScan(path, outputPath, format, verbose, baselinePath, pruneBaseline, verify),
-            pathArgument,
-            outputOption,
-            formatOption,
-            verboseOption,
-            baselineOption,
-            pruneBaselineOption,
-            verifyOption);
+        rootCommand.SetHandler(async context =>
+        {
+            var parseResult = context.ParseResult;
+            var options = new ScanOptions(
+                Root: parseResult.GetValueForArgument(pathArgument),
+                OutputPath: parseResult.GetValueForOption(outputOption),
+                EntropyThreshold: parseResult.GetValueForOption(entropyThresholdOption),
+                MinTokenLength: parseResult.GetValueForOption(minTokenLengthOption),
+                ExcludeGlobs: parseResult.GetValueForOption(excludeOption) ?? Array.Empty<string>());
+
+            context.ExitCode = await RunScan(
+                options,
+                parseResult.GetValueForOption(formatOption) ?? "console",
+                parseResult.GetValueForOption(verboseOption),
+                parseResult.GetValueForOption(baselineOption),
+                parseResult.GetValueForOption(pruneBaselineOption),
+                parseResult.GetValueForOption(verifyOption));
+        });
 
         return rootCommand;
     }
 
     private static async Task<int> RunScan(
-        string path,
-        string? outputPath,
+        ScanOptions scanOptions,
         string format,
         bool verbose,
         string? baselinePath,
@@ -120,18 +168,27 @@ public static class Program
 
         try
         {
-            // Validate path
-            if (string.IsNullOrWhiteSpace(path))
+            // Validate all options before any file is touched. Every violation is reported at once.
+            var validationErrors = ScanOptionsValidator.Validate(scanOptions);
+            if (validationErrors.Count > 0)
             {
-                Console.Error.WriteLine("Error: Path cannot be null or whitespace.");
+                Console.Error.WriteLine("Error: invalid scan options:");
+                foreach (var validationError in validationErrors)
+                {
+                    Console.Error.WriteLine($"  - {validationError}");
+                }
+
                 return ExitCodes.ScanError;
             }
 
-            if (path != "-" && !Directory.Exists(path) && !File.Exists(path))
+            var path = scanOptions.Root;
+            var outputPath = scanOptions.OutputPath;
+            var excludeGlobs = scanOptions.ExcludeGlobs ?? Array.Empty<string>();
+            var entropySettings = EntropyDetectionSettings.Default with
             {
-                Console.Error.WriteLine($"Error: Path '{path}' does not exist.");
-                return ExitCodes.ScanError;
-            }
+                Threshold = scanOptions.EntropyThreshold,
+                MinLength = scanOptions.MinTokenLength
+            };
 
             // Load baseline if specified
             BaselineFile? baseline = null;
@@ -167,14 +224,14 @@ public static class Program
             ILoggerFactory? loggerFactory = verbose ? LoggerFactory.Create(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Debug)) : null;
             ILogger<SolutionScanner>? scannerLogger = loggerFactory?.CreateLogger<SolutionScanner>();
             ILogger<FileWalker>? fileWalkerLogger = loggerFactory?.CreateLogger<FileWalker>();
-            var scanner = new SolutionScanner(rules, scannerLogger);
+            var scanner = new SolutionScanner(rules, scannerLogger, entropySettings, excludeGlobs);
             Log(verbose, $"event=scan_start root={path} ruleCount={rules.Count}");
 
             var filesSkipped = 0L;
             if (verbose && path != "-" && Directory.Exists(path))
             {
                 var discoveryStopwatch = Stopwatch.StartNew();
-                var diagnosticFileWalker = new FileWalker(fileWalkerLogger);
+                var diagnosticFileWalker = new FileWalker(fileWalkerLogger, excludeGlobs);
                 _ = diagnosticFileWalker.EnumerateFiles(path).Count();
                 discoveryStopwatch.Stop();
                 filesSkipped = diagnosticFileWalker.SkippedFileCount

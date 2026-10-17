@@ -47,12 +47,25 @@ Add `-v` (`--verbose`) to list each finding with its file, line, rule and secret
 
 ### Tuning entropy detection
 
-The CLI has no options for the entropy threshold or for excluding paths. The current behavior is:
+| Option | Default | Accepted values |
+|--------|---------|-----------------|
+| `--entropy-threshold <bits>` | `4.5` | Between `0` and `8` bits per character |
+| `--min-token-length <n>` | `20` | At least `8` |
+| `--exclude <glob>` | none | Repeatable. Matches a path segment or a path prefix relative to the scan root |
 
-- **Entropy threshold:** fixed at `4.5` bits per character, with a minimum string length of `20`. These values come from `EntropyDetectionSettings` in `src/EntropyDetector.cs`, but `SolutionScanner` does not pass custom settings, so the defaults always apply.
+Glob syntax for `--exclude`: `*` (any characters except `/`), `?` (one character except `/`), `**/` (any leading directories), a trailing `/**` (everything below a directory), and `[...]` character classes. Brace alternatives such as `{a,b}` are rejected; pass one `--exclude` per alternative. Example:
+
+```bash
+dotnet-secrets-scan ./src --exclude "**/*.min.js" --exclude tests/fixtures
+```
+
+Invalid options are checked before any file is read. Every problem is reported in one message and the tool exits with code `2`. Non-numeric values for numeric options also exit with `2`.
+
+Other behavior:
+
 - **File types:** only `.cs`, `.json`, `.config`, `.xml`, `.yml`, `.yaml` and `.env` files are scanned. Other extensions are ignored.
 - **File size:** files larger than 1 MB are skipped.
-- **Directory exclusions:** `FileWalker` is written to skip `bin`, `obj`, `.git` and `node_modules`, but this does not take effect during directory scans, so those folders are scanned too. To avoid them, scan the source folders directly, for example `dotnet-secrets-scan ./src`.
+- **Default directory exclusions:** `bin`, `obj`, `.git` and `node_modules` are skipped at any depth under the scan root.
 
 ## CI integration
 

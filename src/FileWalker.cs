@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -40,7 +41,7 @@ public sealed class FileWalker
     /// </summary>
     public const long DefaultMaxFileSizeBytes = 1024 * 1024;
 
-    private readonly HashSet<string> _excludePatterns;
+    private readonly List<Regex> _excludePatterns;
     private readonly HashSet<string> _excludedDirectories;
     private readonly long _maxFileSizeBytes;
     private readonly ILogger<FileWalker> _logger;
@@ -61,7 +62,10 @@ public sealed class FileWalker
     /// Initializes a new instance of the <see cref="FileWalker"/> class.
     /// </summary>
     /// <param name="logger">Optional logger for structured logging. Defaults to NullLogger.</param>
-    /// <param name="excludeGlobs">Optional additional glob patterns to exclude from enumeration.</param>
+    /// <param name="excludeGlobs">
+    /// Optional glob patterns to exclude from enumeration. Each pattern is matched against a path segment or a
+    /// path prefix relative to the root. See <see cref="GlobPattern"/> for the supported syntax.
+    /// </param>
     /// <param name="maxFileSizeBytes">
     /// Optional maximum file size (in bytes) to process. Files larger than this value will be skipped.
     /// Defaults to <see cref="DefaultMaxFileSizeBytes"/> (1 MB).
@@ -77,7 +81,7 @@ public sealed class FileWalker
         IEnumerable<string>? excludedDirectories = null)
     {
         _logger = logger ?? NullLogger<FileWalker>.Instance;
-        _excludePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _excludePatterns = new List<Regex>();
         _excludedDirectories = new HashSet<string>(DefaultDirectoryExclusions, StringComparer.OrdinalIgnoreCase);
 
         if (excludeGlobs != null)
@@ -86,7 +90,7 @@ public sealed class FileWalker
             {
                 if (!string.IsNullOrWhiteSpace(pattern))
                 {
-                    _excludePatterns.Add(pattern.TrimEnd('/', '\\'));
+                    _excludePatterns.Add(GlobPattern.Compile(pattern));
                 }
             }
         }
@@ -140,10 +144,23 @@ public sealed class FileWalker
         var searchOption = SearchOption.AllDirectories;
         var dirInfo = new DirectoryInfo(rootPath);
 
-        return EnumerateAndLog(EnumerateFilesInternal(dirInfo, searchOption, cancellationToken));
+        return EnumerateAndLog(EnumerateFilesInternal(dirInfo, dirInfo, searchOption, cancellationToken));
     }
 
-    private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo directory, SearchOption searchOption, CancellationToken cancellationToken)
+    private bool MatchesExcludePattern(string candidate)
+    {
+        foreach (var pattern in _excludePatterns)
+        {
+            if (pattern.IsMatch(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private IEnumerable<string> EnumerateFilesInternal(DirectoryInfo root, DirectoryInfo directory, SearchOption searchOption, CancellationToken cancellationToken)
     {
         // Log entering this directory at Debug level
         _logger.LogDebug("Entering directory: {Path}", directory.FullName);
@@ -179,7 +196,8 @@ public sealed class FileWalker
                 continue;
             }
 
-            var relativePath = file.FullName.Substring(directory.FullName.Length).TrimStart('/', '\\');
+            // Measure from the scan root, not the current subdirectory, so exclusions apply at every depth.
+            var relativePath = Path.GetRelativePath(root.FullName, file.FullName);
             var pathSegments = relativePath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (pathSegments.Length == 0)
@@ -197,8 +215,8 @@ public sealed class FileWalker
 
                 var isDirectorySegment = segmentIndex < pathSegments.Length - 1;
                 if ((isDirectorySegment && _excludedDirectories.Contains(segment))
-                    || _excludePatterns.Contains(segment)
-                    || _excludePatterns.Contains(currentPath))
+                    || MatchesExcludePattern(segment)
+                    || MatchesExcludePattern(currentPath))
                 {
                     isExcluded = true;
                     break;
@@ -249,7 +267,7 @@ public sealed class FileWalker
 
             foreach (var subDir in subDirectories)
             {
-                foreach (var file in EnumerateFilesInternal(subDir, searchOption, cancellationToken))
+                foreach (var file in EnumerateFilesInternal(root, subDir, searchOption, cancellationToken))
                 {
                     yield return file;
                 }

@@ -34,17 +34,27 @@ public sealed class SolutionScanner
     /// </summary>
     private readonly IEnumerable<SecretRule> _rules;
     private readonly ILogger<SolutionScanner> _logger;
+    private readonly EntropyDetectionSettings _entropySettings;
+    private readonly IReadOnlyList<string> _excludeGlobs;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SolutionScanner"/> class.
     /// </summary>
     /// <param name="rules">The collection of secret detection rules to use for scanning.</param>
     /// <param name="logger">Optional logger for structured logging. Defaults to NullLogger.</param>
+    /// <param name="entropySettings">Optional entropy detection settings. Defaults to <see cref="EntropyDetectionSettings.Default"/>.</param>
+    /// <param name="excludeGlobs">Optional glob patterns for paths to skip. See <see cref="FileWalker"/>.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="rules"/> is null.</exception>
-    public SolutionScanner(IEnumerable<SecretRule> rules, ILogger<SolutionScanner>? logger = null)
+    public SolutionScanner(
+        IEnumerable<SecretRule> rules,
+        ILogger<SolutionScanner>? logger = null,
+        EntropyDetectionSettings? entropySettings = null,
+        IEnumerable<string>? excludeGlobs = null)
     {
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _logger = logger ?? NullLogger<SolutionScanner>.Instance;
+        _entropySettings = entropySettings ?? EntropyDetectionSettings.Default;
+        _excludeGlobs = excludeGlobs?.ToList() ?? new List<string>();
     }
 
     /// <summary>
@@ -95,7 +105,7 @@ public sealed class SolutionScanner
 
         try
         {
-            var fileWalker = new FileWalker(logger: null);
+            var fileWalker = new FileWalker(logger: null, excludeGlobs: _excludeGlobs);
             var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions
@@ -209,7 +219,7 @@ public sealed class SolutionScanner
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var fileWalker = new FileWalker(logger: null);
+            var fileWalker = new FileWalker(logger: null, excludeGlobs: _excludeGlobs);
             var files = fileWalker.EnumerateFiles(rootPath, cancellationToken).ToList();
 
             var parallelOptions = new ParallelOptions
@@ -312,7 +322,7 @@ public sealed class SolutionScanner
                 }
 
                 // Apply entropy detection
-                var entropyFindings = EntropyDetector.Scan(filePath, tempLines);
+                var entropyFindings = EntropyDetector.Scan(filePath, tempLines, _entropySettings);
                 foreach (var finding in entropyFindings)
                 {
                     finding.LineNumber += currentLineNumber - 1;
@@ -409,7 +419,7 @@ public sealed class SolutionScanner
                 }
 
                 // Apply entropy detection
-                var entropyFindings = EntropyDetector.Scan(filePath, tempLines);
+                var entropyFindings = EntropyDetector.Scan(filePath, tempLines, _entropySettings);
                 foreach (var finding in entropyFindings)
                 {
                     finding.LineNumber += currentLineNumber - 1;
@@ -451,7 +461,7 @@ public sealed class SolutionScanner
             }
         }
 
-        var entropyFindings = EntropyDetector.Scan(filePath, lines);
+        var entropyFindings = EntropyDetector.Scan(filePath, lines, _entropySettings);
         findings.AddRange(entropyFindings);
 
         // Honor "secrets-scan:ignore" comments (on the flagged line or the line above).

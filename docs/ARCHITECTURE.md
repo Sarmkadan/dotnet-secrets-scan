@@ -64,8 +64,9 @@ ScanResult { Findings, TotalFilesScanned, TotalLinesScanned, Timestamp }
 ## Extension points
 
 - **Custom rules:** pass any `IEnumerable<SecretRule>` to `new SolutionScanner(rules)` - built-in sets are just defaults you can combine or replace.
-- **Custom exclusions:** `new FileWalker(excludeGlobs)` accepts extra directory names/relative paths to skip (exact segment/path match, despite the parameter name - not full glob syntax).
-- **Entropy tuning:** `EntropyDetector.Scan(path, lines, threshold, minLength)` exposes both knobs (defaults 4.5 / 20).
+- **Custom exclusions:** `new FileWalker(excludeGlobs: ...)` skips paths matching glob patterns, matched against each path segment and path prefix relative to the scan root. `GlobPattern` (`src/GlobPattern.cs`) holds the syntax. `SolutionScanner` accepts the same patterns in its constructor.
+- **Entropy tuning:** `new SolutionScanner(rules, logger, entropySettings)` passes `EntropyDetectionSettings` to every scan; `EntropyDetector.Scan(path, lines, settings)` also takes them directly.
+- **Option validation:** `ScanOptionsValidator.Validate(ScanOptions)` returns every violation in one list (threshold range, minimum token length, scan root existence, output directory writability, glob syntax). The CLI runs it before the scan starts.
 - **Output formats:** `ScanResult` is a plain object; new writers only need to consume `IReadOnlyList<SecretFinding>`.
 
 ## Known limitations
@@ -74,7 +75,6 @@ ScanResult { Findings, TotalFilesScanned, TotalLinesScanned, Timestamp }
 - **Entropy detector suppresses most real secrets.** `IsBase64Like` filters out any literal where >85% of characters are alphanumeric/base64 - which describes almost every actual token. In practice the entropy path mostly catches secrets containing symbols/punctuation; format-based rules do the heavy lifting.
 - **`FileWalker` extension list is fixed.** `.env` variants like `.env.local` (extension `.local`) are not scanned; neither are `.txt`, `.ps1`, `.sh`, etc.
 - **Line-oriented entropy extraction** misses multi-line raw string literals and verbatim strings spanning lines.
-- **`SolutionScanner` uses the default `FileWalker`** - custom exclude patterns can't currently be passed through `Scan()`.
 - **Duplicate reporting** when both `BuiltInRules.All` and `CloudProviderRules.All` are supplied (overlapping Stripe/Slack/PEM patterns).
 - Rule regexes are recompiled per file (`new Regex(..., RegexOptions.Compiled)` inside the match loop) - correctness is unaffected, but it wastes the compilation cost.
 
