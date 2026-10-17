@@ -32,7 +32,10 @@ public enum SecretSeverity
 /// </remarks>
 public sealed record SecretRule
 {
-    private static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// Upper bound on a single regex match, so that a catastrophically backtracking pattern cannot hang a scan.
+    /// </summary>
+    internal static readonly TimeSpan MatchTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Gets the rule identifier (e.g., SS001).

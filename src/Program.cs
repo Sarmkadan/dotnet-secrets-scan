@@ -181,6 +181,19 @@ public static class Program
                 return ExitCodes.ScanError;
             }
 
+            // Validate the rule set before any file is touched. With no custom configuration this checks the shipped rules.
+            var ruleConfigurationErrors = RuleConfigurationValidator.Validate(configuration: null);
+            if (ruleConfigurationErrors.Count > 0)
+            {
+                Console.Error.WriteLine("Error: invalid rule configuration:");
+                foreach (var ruleConfigurationError in ruleConfigurationErrors)
+                {
+                    Console.Error.WriteLine($"  - {ruleConfigurationError}");
+                }
+
+                return ExitCodes.ScanError;
+            }
+
             var path = scanOptions.Root;
             var outputPath = scanOptions.OutputPath;
             var excludeGlobs = scanOptions.ExcludeGlobs ?? Array.Empty<string>();
