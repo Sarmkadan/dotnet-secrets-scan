@@ -54,6 +54,108 @@ The CLI has no options for the entropy threshold or for excluding paths. The cur
 - **File size:** files larger than 1 MB are skipped.
 - **Directory exclusions:** `FileWalker` is written to skip `bin`, `obj`, `.git` and `node_modules`, but this does not take effect during directory scans, so those folders are scanned too. To avoid them, scan the source folders directly, for example `dotnet-secrets-scan ./src`.
 
+## CI integration
+
+The examples install the tool from source because it is not published to NuGet. In real use, pin the checkout `ref` of the tool repository to a tag or commit SHA.
+
+The exit code is what fails the build:
+
+| Exit code | Meaning |
+|-----------|---------|
+| `0` | Scan completed, no findings |
+| `1` | Findings detected |
+| `2` | Scan error (path does not exist, baseline cannot be loaded, file or output write failed) |
+
+`-f sarif` without `-o` prints the console report instead of SARIF, so always pass `--output`.
+
+> **Warning:** SARIF output contains the raw secret value (`properties.secretValue`). Uploading it to code scanning makes the secret visible to anyone who can read that repository's alerts. Use this only for private repositories, and rotate any credential that the scan finds.
+
+### GitHub Actions
+
+Save as `.github/workflows/secrets-scan.yml`:
+
+```yaml
+name: Secrets scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF to code scanning
+
+jobs:
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Check out the tool outside the workspace so that its own sources are not scanned.
+      - name: Check out dotnet-secrets-scan
+        uses: actions/checkout@v4
+        with:
+          repository: Sarmkadan/dotnet-secrets-scan
+          path: ${{ runner.temp }}/dotnet-secrets-scan
+
+      - name: Install dotnet-secrets-scan
+        run: |
+          dotnet pack "$RUNNER_TEMP/dotnet-secrets-scan" -c Release -o "$RUNNER_TEMP/nupkg"
+          dotnet tool install --tool-path "$RUNNER_TEMP/tools" --add-source "$RUNNER_TEMP/nupkg" DotnetSecretsScan
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+
+      # Exit code 1 (findings) or 2 (scan error) fails this step and the job.
+      # The report goes to RUNNER_TEMP so it is never left in the workspace.
+      - name: Scan for secrets
+        run: dotnet-secrets-scan . --format sarif --output "$RUNNER_TEMP/secrets.sarif"
+
+      # Runs even when the scan failed, so findings still reach code scanning.
+      # The scanner writes absolute paths; code scanning needs them relative to the repository root.
+      - name: Make SARIF paths repository-relative
+        id: paths
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/secrets.sarif" ]; then
+            jq --arg root "$GITHUB_WORKSPACE/" \
+              '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= ltrimstr($root)' \
+              "$RUNNER_TEMP/secrets.sarif" > "$RUNNER_TEMP/secrets-repo.sarif"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: always() && steps.paths.outputs.ready == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ runner.temp }}/secrets-repo.sarif
+          category: secrets-scan
+```
+
+Uploads from `pull_request` events on forks are rejected because the token is read-only. Scan those PRs with the `push` trigger after merge, or run the scan without the upload step.
+
+### Pre-commit hook
+
+Install the tool locally first (see [Install as a global tool](#install-as-a-global-tool)). Save the script below as `.git/hooks/pre-commit` and make it executable with `chmod +x .git/hooks/pre-commit`:
+
+```sh
+#!/bin/sh
+# Block the commit when the scanner reports findings (1) or fails (2).
+dotnet-secrets-scan . --format console
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "dotnet-secrets-scan exited with $status (1 = secrets found, 2 = scan error). Commit aborted." >&2
+  exit 1
+fi
+```
+
+The hook scans the whole working tree, not only the staged files. Add `--baseline .secrets-baseline.json` once you have a baseline file. Git does not version files in `.git/hooks`; to share the hook with the team, put it in a tracked directory and point `core.hooksPath` at it.
+
 ## Architecture
 
 Class library combining regex rule sets (`BuiltInRules`, `CloudProviderRules`) with entropy-based detection, plus baselining, ignore comments, and console/JSON/SARIF/HTML report writers. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown, data flow, and known limitations.
