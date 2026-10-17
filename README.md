@@ -2,6 +2,58 @@
 
 Scans a .NET solution for leaked secrets in appsettings, code and connection strings.
 
+## Getting Started
+
+### Install as a global tool
+
+Requires the .NET 10 SDK. From the repository root, pack the tool and install it globally:
+
+```bash
+dotnet pack -c Release -o ./nupkg
+dotnet tool install -g --add-source ./nupkg DotnetSecretsScan
+```
+
+The installed command is `dotnet-secrets-scan`. Run `dotnet-secrets-scan --help` to see all options.
+
+### Scan the current directory
+
+```bash
+cd /path/to/your/solution
+dotnet-secrets-scan .
+```
+
+Exit codes: `0` clean, `1` findings, `2` scan error.
+
+### Scan with SARIF output
+
+```bash
+dotnet-secrets-scan . --format sarif --output secrets.sarif
+```
+
+Short forms work too: `dotnet-secrets-scan . -f sarif -o secrets.sarif`. Findings contain the raw secret value, so treat the output file as sensitive and do not commit it.
+
+Expected console output for the default format:
+
+```text
+Scan completed: 2 files, 7 lines, 4 findings
+Timestamp: 2026-10-17 15:13:18 +00:00
+
+High: 4 findings
+
+Summary: 2 files, 7 lines scanned, 4 findings (High: 4)
+```
+
+Add `-v` (`--verbose`) to list each finding with its file, line, rule and secret, plus diagnostic output on stderr.
+
+### Tuning entropy detection
+
+The CLI has no options for the entropy threshold or for excluding paths. The current behavior is:
+
+- **Entropy threshold:** fixed at `4.5` bits per character, with a minimum string length of `20`. These values come from `EntropyDetectionSettings` in `src/EntropyDetector.cs`, but `SolutionScanner` does not pass custom settings, so the defaults always apply.
+- **File types:** only `.cs`, `.json`, `.config`, `.xml`, `.yml`, `.yaml` and `.env` files are scanned. Other extensions are ignored.
+- **File size:** files larger than 1 MB are skipped.
+- **Directory exclusions:** `FileWalker` is written to skip `bin`, `obj`, `.git` and `node_modules`, but this does not take effect during directory scans, so those folders are scanned too. To avoid them, scan the source folders directly, for example `dotnet-secrets-scan ./src`.
+
 ## Architecture
 
 Class library combining regex rule sets (`BuiltInRules`, `CloudProviderRules`) with entropy-based detection, plus baselining, ignore comments, and console/JSON/SARIF/HTML report writers. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown, data flow, and known limitations.
